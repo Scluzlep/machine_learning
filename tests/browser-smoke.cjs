@@ -28,6 +28,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
             py.FS.writeFile('/home/pyodide/browser_ml/tfjs_bridge.py', script);
             const compatText = await (await fetch(data.compat)).text();
             py.FS.writeFile('/home/pyodide/browser_ml/tfjs_compat.py', compatText);
+            globalThis.importScripts(data.losses);
             const output = await py.runPythonAsync(
                 "import numpy as np, scipy, pandas, matplotlib, sklearn\\n"
               + "from sklearn.linear_model import LinearRegression\\n"
@@ -68,6 +69,23 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
               + "assert model2.predict([[0,0]]).shape==(1,1)\\n"
               + "model2.dispose()\\n"
             );
+            await py.runPythonAsync(
+                "import numpy as np\\n"
+              + "from tensorflow.keras.models import Sequential\\n"
+              + "from tensorflow.keras.layers import Dense\\n"
+              + "import tensorflow as tf\\n"
+              + "m3=Sequential([Dense(8,'relu'), Dense(4,'linear')])\\n"
+              + "m3.compile(loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), optimizer=tf.keras.optimizers.Adam(0.03))\\n"
+              + "xc=np.asarray([[0,0],[0,1],[1,0],[1,1]] * 12,dtype='float32')\\n"
+              + "yc=np.asarray([0,1,2,3]*12,dtype='int32')\\n"
+              + "hist3=await m3.fit(xc,yc,epochs=18,batch_size=12)\\n"
+              + "assert 'loss' in hist3.history and len(hist3.history['loss'])==18\\n"
+              + "assert np.isfinite(hist3.history['loss']).all()\\n"
+              + "assert hist3.history['loss'][-1] < hist3.history['loss'][0]\\n"
+              + "assert m3.predict(xc[:4]).shape == (4,4)\\n"
+              + "assert m3.layers[0].get_weights()[0].shape == (2,8)\\n"
+              + "m3.dispose()\\n"
+            );
             self.postMessage({ok:true,backend:output});
           } catch (err) {self.postMessage({ok:false,error:String(err),stack:err.stack})}
         }`;
@@ -77,7 +95,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
         const timer=setTimeout(()=>{worker.terminate();reject(Error('Pyodide/TF.js smoke test timed out'));},150000);
         worker.onmessage=e=>{clearTimeout(timer);worker.terminate();URL.revokeObjectURL(blob);resolve(e.data)};
         worker.onerror=e=>{clearTimeout(timer);worker.terminate();reject(Error(e.message||'Worker error'))};
-        worker.postMessage({bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,compat:`http://127.0.0.1:${port}/vendor/tfjs_compat.py`,tfjs:src});
+        worker.postMessage({bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,compat:`http://127.0.0.1:${port}/vendor/tfjs_compat.py`,losses:`http://127.0.0.1:${port}/vendor/course-losses.js`,tfjs:src});
       });
     },port);
     console.log('Browser scientific/TensorFlow.js backend test:', JSON.stringify(outcome));
