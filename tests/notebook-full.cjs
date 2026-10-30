@@ -24,7 +24,9 @@ function notebooks(dir, root = dir) {
 
 const all = notebooks(source).sort();
 assert(all.length >= 44, `Expected all course notebooks, found ${all.length}`);
-const selected = all.filter((_, i) => i % shards === shard);
+const selected = all.filter((notebook, i) => i % shards === shard &&
+  (!process.env.NOTEBOOK_FILTER || notebook === process.env.NOTEBOOK_FILTER));
+assert(selected.length, 'No notebooks selected');
 fs.mkdirSync(reportDir, { recursive: true });
 
 const port = 8790;
@@ -72,16 +74,19 @@ async function runNotebook(browser, relativePath) {
     }
     await page.locator('.jp-NotebookPanel').first().waitFor({ timeout: 60000 });
     await page.waitForFunction(() => {
-      const app = window.jupyterapp;
-      const panel = app?.shell?.currentWidget;
-      return panel?.content?.model?.cells && panel?.sessionContext?.session?.kernel;
-    }, null, { timeout: 120000 });
+      const toolbar = document.querySelector('.jp-NotebookPanel .jp-Toolbar');
+      const text = toolbar?.textContent || '';
+      return /Python|Pyodide/i.test(text) && !/No Kernel/i.test(text);
+    }, null, { timeout: 60000 });
 
     let timer;
     try {
       result.cells = await Promise.race([
         page.evaluate(async () => {
         const app = window.jupyterapp;
+        if (!app?.commands || !app?.shell?.currentWidget?.content?.model?.cells) {
+          throw new Error('JupyterLab application API unavailable after notebook opened');
+        }
         await app.commands.execute('notebook:clear-all-cell-outputs');
         await app.commands.execute('notebook:run-all-cells');
         const panel = app.shell.currentWidget;
