@@ -43,6 +43,20 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
       'model = Sequential([Dense(2, activation="sigmoid", input_shape=(2,)), Dense(1, activation="sigmoid")])',
       'model.compile(loss=tf.keras.losses.BinaryCrossentropy(), optimizer=tf.keras.optimizers.Adam(learning_rate=0.01))',
       'model.fit([[0,0],[1,0],[0,1],[1,1]], [[0],[1],[1],[1]], epochs=2)',
+      'from sklearn.linear_model import Ridge',
+      'ridge = Ridge(alpha=0.25, normalize=True, max_iter=10000)',
+      'ridge.fit([[1,2],[2,3],[3,5],[4,6]], [2,3,4,5])',
+      'assert len(ridge.predict([[5,7]])) == 1',
+      'print("ML_LEGACY_RIDGE_OK")',
+      'from scipy import ndimage, misc',
+      'from PIL import Image',
+      'import numpy as np, tempfile, pathlib',
+      'with tempfile.TemporaryDirectory() as folder:',
+      '    path = pathlib.Path(folder) / "sample.png"',
+      '    Image.fromarray(np.zeros((5,7,3), dtype=np.uint8)).save(path)',
+      '    assert ndimage.imread(path).shape == (5,7,3)',
+      '    assert misc.imresize(ndimage.imread(path), (3,4)).shape == (3,4,3)',
+      'print("ML_LEGACY_SCIPY_OK")',
       'print("ML_KERNEL_ZERO_EDIT_OK")'
     ].join('\n');
     const url = `http://127.0.0.1:${port}/machine_learning/repl/index.html?kernel=python&code=${encodeURIComponent(python)}`;
@@ -51,7 +65,9 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
     try {
       await page.waitForFunction(
         () => [...document.querySelectorAll('.jp-OutputArea-output')]
-           .some(node => node.textContent.includes('ML_KERNEL_ZERO_EDIT_OK')),
+           .some(node => node.textContent.includes('ML_KERNEL_ZERO_EDIT_OK') &&
+                        node.textContent.includes('ML_LEGACY_RIDGE_OK') &&
+                        node.textContent.includes('ML_LEGACY_SCIPY_OK')),
         null, {timeout:90000}
       );
     } catch (error) {
