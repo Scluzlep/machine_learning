@@ -31,11 +31,25 @@ const port = 8790;
 const siteUrl = process.env.NOTEBOOK_SITE_URL || `http://127.0.0.1:${port}/machine_learning/lab/`;
 let server;
 if (!process.env.NOTEBOOK_SITE_URL) {
+  assert(fs.existsSync(path.resolve('dist/lab/index.html')), 'Build dist/ before local validation');
   const root = path.resolve('.site-test-root');
   const mount = path.join(root, 'machine_learning');
   fs.mkdirSync(root, { recursive: true });
   if (!fs.existsSync(mount)) fs.symlinkSync(path.resolve('dist'), mount, 'dir');
   server = spawn('python', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
+}
+
+async function waitForSite() {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    if (server?.exitCode != null) throw new Error(`Local HTTP server exited with code ${server.exitCode}`);
+    try {
+      const response = await fetch(siteUrl, { signal: AbortSignal.timeout(2000) });
+      if (response.ok) return;
+    } catch { /* The server may still be starting. */ }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error(`Site did not become ready: ${siteUrl}`);
 }
 
 async function runNotebook(browser, relativePath) {
@@ -106,6 +120,7 @@ async function runNotebook(browser, relativePath) {
   let browser;
   const results = [];
   try {
+    await waitForSite();
     browser = await chromium.launch({ headless: !headed, args: ['--no-sandbox'] });
     for (const notebook of selected) {
       const result = await runNotebook(browser, notebook);
