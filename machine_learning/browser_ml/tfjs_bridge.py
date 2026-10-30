@@ -146,48 +146,150 @@ def _tensor(value):
 
 
 class Dense:
-    def __init__(self, units, activation="linear", input_shape=None, name=None):
+    """Keras-style dense layer with optional delayed input-shape inference."""
+
+    def __init__(self, units, activation="linear", input_shape=None,
+                 name=None, input_dim=None, **kwargs):
+        if kwargs:
+            raise TypeError("Unsupported Dense arguments: " + ", ".join(kwargs))
         self.units = int(units)
         self.activation = activation
-        self.input_shape = input_shape
+        self.input_shape = tuple(input_shape) if input_shape is not None else (
+            (int(input_dim),) if input_dim is not None else None
+        )
         self.name = name
+        self._layer = None
+
+    def _js_layer(self, inferred_input=None):
+        if self._layer is None:
+            tf = _require_tf()
+            opts = {"units": self.units, "activation": self.activation}
+            shape = self.input_shape or inferred_input
+            if shape is not None:
+                opts["inputShape"] = list(shape)
+            if self.name is not None:
+                opts["name"] = self.name
+            self._layer = tf.layers.dense(_config(**opts))
+        return self._layer
+
+    def __call__(self, value):
+        x = _tensor(value)
+        try:
+            result = self._js_layer().apply(x)
+            try:
+                return np.asarray(result.arraySync().to_py(), dtype=np.float32)
+            finally:
+                result.dispose()
+        finally:
+            x.dispose()
+
+    def get_weights(self):
+        if self._layer is None:
+            return []
+        return [np.asarray(t.arraySync().to_py(), dtype=np.float32)
+                for t in self._layer.getWeights()]
+
+    def set_weights(self, values):
+        if self._layer is None:
+            raise ValueError("The layer has not been built; call it or build the model first")
+        tf = _require_tf()
+        tensors = [tf.tensor(to_js(np.asarray(v, dtype=np.float32).tolist()))
+                   for v in values]
+        try:
+            self._layer.setWeights(globalThis.Array.of(*tensors))
+        finally:
+            for tensor in tensors:
+                tensor.dispose()
+
+    @property
+    def weights(self):
+        return self.get_weights()
 
 
 class Sequential:
-    def __init__(self, layers, name="model"):
-        tf = _require_tf()
-        self._model = tf.sequential(_config(name=name))
-        for layer in layers:
-            if not isinstance(layer, Dense):
-                raise TypeError("Only Dense layers are supported in this adapter")
-            opts = {"units": layer.units, "activation": layer.activation}
-            if layer.input_shape is not None:
-                opts["inputShape"] = list(layer.input_shape)
-            if layer.name is not None:
-                opts["name"] = layer.name
-            self._model.add(tf.layers.dense(_config(**opts)))
+    """TF.js Layers model built lazily when Keras omits input_shape."""
 
-    def compile(self, *, optimizer="adam", learning_rate=0.001, loss="meanSquaredError"):
+    def __init__(self, layers, name="model"):
+        self._tf = _require_tf()
+        self._name = name
+        self._layers = list(layers)
+        self._model = None
+        self._compile_options = None
+        self._built_n_features = None
+        if not all(isinstance(layer, Dense) for layer in self._layers):
+            raise TypeError("This adapter supports Dense layers only")
+        if self._layers and self._layers[0].input_shape is not None:
+            self._build(self._layers[0].input_shape[0])
+
+    def add(self, layer):
+        if self._model is not None:
+            raise RuntimeError("Adding layers after building the model is not supported")
+        if not isinstance(layer, Dense):
+            raise TypeError("Expected a Dense layer")
+        self._layers.append(layer)
+
+    @property
+    def layers(self):
+        return self._layers
+
+    def _build(self, n_features):
+        n_features = int(n_features)
+        if self._model is not None:
+            if n_features != self._built_n_features:
+                raise ValueError(
+                    f"Input features changed from {self._built_n_features} to {n_features}"
+                )
+            return
+        if not self._layers:
+            raise ValueError("Sequential model has no layers")
+        self._model = self._tf.sequential(_config(name=self._name))
+        for i, layer in enumerate(self._layers):
+            self._model.add(layer._js_layer((n_features,) if i == 0 else None))
+        self._built_n_features = n_features
+        if self._compile_options is not None:
+            self._model.compile(self._compile_options)
+
+    def compile(self, *, optimizer="adam", learning_rate=0.001,
+                loss="meanSquaredError", metrics=None):
         if optimizer != "adam":
             raise ValueError("Only the Adam optimizer is supported")
-        tf = _require_tf()
-        self._model.compile(_config(optimizer=tf.train.adam(float(learning_rate)), loss=loss))
+        options = {
+            "optimizer": self._tf.train.adam(float(learning_rate)),
+            "loss": loss,
+        }
+        if metrics is not None:
+            options["metrics"] = metrics
+        self._compile_options = _config(**options)
+        if self._model is not None:
+            self._model.compile(self._compile_options)
 
-    async def fit(self, X, y, *, epochs=10, batch_size=32, verbose=0):
-        """Train using TF.js; model.fit is async, so remember to await it."""
-        xjs, yjs = _tensor(X), _tensor(y)
+    async def fit(self, X, y, *, epochs=10, batch_size=32, verbose=0,
+                  shuffle=True):
+        data = np.asarray(X, dtype=np.float32)
+        if data.ndim != 2:
+            raise ValueError("model.fit expects a matrix of shape (rows, features)")
+        self._build(data.shape[1])
+        if self._compile_options is None:
+            raise ValueError("Compile the model before calling fit")
+        xjs = _tensor(data)
+        yjs = _tensor(y)
         try:
-            result = await self._model.fit(xjs, yjs, _config(
-                epochs=int(epochs), batchSize=int(batch_size),
-                verbose=int(verbose), shuffle=True,
-            ))
+            result = await self._model.fit(
+                xjs, yjs,
+                _config(epochs=int(epochs), batchSize=int(batch_size),
+                        verbose=int(verbose), shuffle=bool(shuffle))
+            )
             return result.history.to_py()
         finally:
             xjs.dispose()
             yjs.dispose()
 
-    def predict(self, X):
-        xjs = _tensor(X)
+    def predict(self, X, **kwargs):
+        data = np.asarray(X, dtype=np.float32)
+        if data.ndim != 2:
+            raise ValueError("model.predict expects a 2D feature matrix")
+        self._build(data.shape[1])
+        xjs = _tensor(data)
         try:
             pred = self._model.predict(xjs)
             try:
@@ -197,12 +299,23 @@ class Sequential:
         finally:
             xjs.dispose()
 
+    def get_weights(self):
+        if self._model is None:
+            raise ValueError("Model has not been built yet")
+        return [np.asarray(t.arraySync().to_py(), dtype=np.float32)
+                for t in self._model.getWeights()]
+
     def summary(self):
-        self._model.summary()
+        if self._model is None:
+            print(f"Model: {self._name} (unbuilt, input shape inferred on first data)")
+            for layer in self._layers:
+                print(f"  Dense({layer.units}, activation={layer.activation!r})")
+        else:
+            self._model.summary()
 
     def dispose(self):
-        self._model.dispose()
-
+        if self._model is not None:
+            self._model.dispose()
 
 def backend():
     return str(_require_tf().getBackend())
