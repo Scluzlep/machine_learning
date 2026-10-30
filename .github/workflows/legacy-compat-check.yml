@@ -87,6 +87,32 @@ jobs:
           cp machine_learning/browser_ml/tfjs_compat.py dist/vendor/tfjs_compat.py
           cp machine_learning/browser_ml/tfjs_tensor.py dist/vendor/tfjs_tensor.py
           cp machine_learning/browser_ml/tfjs_layers.py dist/vendor/tfjs_layers.py
+      - name: Diagnose old Worker bundled dynamic import and federated extensions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root = Path('dist')
+          count = 0
+          for path in root.rglob('*'):
+              if path.is_file() and path.suffix in ('.js', '.mjs') and path.stat().st_size < 10000000:
+                  try: value = path.read_text(encoding='utf-8')
+                  except UnicodeDecodeError: continue
+                  if 'pyodideUrl' in value or 'Cannot find module' in value:
+                      for token in ('pyodideUrl', 'Cannot find module'):
+                          start = value.find(token)
+                          if start < 0: continue
+                          print('WORKER_CODE', path, 'bytes', path.stat().st_size,
+                                'TOKEN', token, 'CONTEXT', repr(value[max(0,start-550):start+850]))
+                      count += 1
+                      if count >= 12: break
+          for path in list(root.glob('extensions/*/package.json')) + list(root.glob('extensions/@*/*/package.json')):
+              try:
+                  d=json.loads(path.read_text())
+                  print('EXTENSION', d.get('name'),d.get('version'),
+                        str(d.get('jupyterlab',{}))[:150])
+              except Exception as err: print('EXTENSION_ERR',path,err)
+          PY
       - name: Browser execution smoke tests for legacy kernel
         run: |
           npm install --prefix .browser-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
