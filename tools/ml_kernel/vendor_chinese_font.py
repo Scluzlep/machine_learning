@@ -31,7 +31,7 @@ def download(destination: Path) -> None:
         with urlopen(FONT_URL, timeout=90) as response:
             payload = response.read()
     git_blob = hashlib.sha1(
-        f"blob {len(payload)}\\0".encode("ascii") + payload
+        f"blob {len(payload)}\0".encode("ascii") + payload
     ).hexdigest()
     if len(payload) != EXPECTED_SIZE or git_blob != EXPECTED_BLOB_SHA1:
         raise ValueError(
