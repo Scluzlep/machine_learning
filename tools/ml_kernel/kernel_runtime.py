@@ -28,6 +28,8 @@ async def initialize_course_dependencies():
 
     await piplite.install(["ipywidgets", "ipympl", "seaborn"])
     _register_ipympl_backends()
+    from .chinese_font import install as install_chinese_font
+    await install_chinese_font()
     _COURSE_DEPENDENCIES_READY = True
 
 
