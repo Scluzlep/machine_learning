@@ -27,6 +27,8 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
       '1. Linear Regression/2.Model_Representation.ipynb',
       '4. Neural Network_part_1/2. CoffeeRoasting_TF.ipynb',
     ]) {
+      if (page) await page.close();
+      page = await browser.newPage();
       const [lesson, notebook] = rel.split('/');
       const response = await page.goto(`${origin}/machine_learning/lab/`, {waitUntil: 'domcontentloaded', timeout: 60000});
       assert.equal(response.status(), 200, 'Expected JupyterLab index');
