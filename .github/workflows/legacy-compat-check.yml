@@ -16,7 +16,7 @@ permissions:
 jobs:
   legacy-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -69,3 +69,28 @@ jobs:
           data=json.loads((root/'jupyter-lite.json').read_text())
           print('Legacy JupyterLite base site built:', sorted(data.keys()))
           PY
+      - name: Host version-matched Pyodide 0.23.4 WASM packages
+        run: |
+          npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@0.23.4
+          python tools/ml_kernel/vendor_pyodide.py --dist dist --base-path /machine_learning
+          python tests/test-legacy-versions.py --dist dist
+      - name: Bundle legacy browser fonts and TensorFlow.js
+        run: |
+          python tools/ml_kernel/vendor_chinese_font.py --output dist/assets/fonts
+          npm install --prefix .tfjs-vendor --no-save --ignore-scripts --no-audit --no-fund @tensorflow/tfjs@4.22.0 @tensorflow/tfjs-backend-webgpu@4.22.0
+          mkdir -p dist/vendor
+          cp .tfjs-vendor/node_modules/@tensorflow/tfjs/dist/tf.min.js dist/vendor/tf.min.js
+          cp .tfjs-vendor/node_modules/@tensorflow/tfjs-backend-webgpu/dist/tf-backend-webgpu.min.js dist/vendor/tf-backend-webgpu.min.js
+          cp machine_learning/browser_ml/course-losses.js dist/vendor/course-losses.js
+          cp machine_learning/browser_ml/tfjs_bridge.py dist/vendor/tfjs_bridge.py
+          cp machine_learning/browser_ml/tfjs_compat.py dist/vendor/tfjs_compat.py
+          cp machine_learning/browser_ml/tfjs_tensor.py dist/vendor/tfjs_tensor.py
+          cp machine_learning/browser_ml/tfjs_layers.py dist/vendor/tfjs_layers.py
+      - name: Browser execution smoke tests for legacy kernel
+        run: |
+          npm install --prefix .browser-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          .browser-test/node_modules/.bin/playwright install chromium
+          node tests/browser-smoke.cjs
+          node tests/repl-zero-edit.cjs
+          node tests/notebook-imports.cjs
+          node tests/repl-widget.cjs
