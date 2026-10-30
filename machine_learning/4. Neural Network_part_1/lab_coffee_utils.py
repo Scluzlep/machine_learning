@@ -54,12 +54,12 @@ def plt_prob(ax,fwb):
 
     # get probability for x0,x1 ranges
     tmp_x0,tmp_x1 = np.meshgrid(x0_space,x1_space)
-    z = np.zeros_like(tmp_x0)
-    for i in range(tmp_x0.shape[0]):
-        for j in range(tmp_x1.shape[1]):
-            x = np.array([[tmp_x0[i,j],tmp_x1[i,j]]])
-            z[i,j] = np.asarray(fwb(x)).item()
-
+    # One vectorized inference instead of 1,600 WebGPU readbacks.
+    points = np.column_stack((tmp_x0.ravel(), tmp_x1.ravel()))
+    values = np.asarray(fwb(points), dtype=np.float64)
+    if values.size != points.shape[0]:
+        raise ValueError("Expected one probability per grid point")
+    z = values.reshape(tmp_x0.shape)
 
     cmap = plt.get_cmap('Blues')
     new_cmap = truncate_colormap(cmap, 0.0, 0.5)
