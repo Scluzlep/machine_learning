@@ -253,11 +253,16 @@ class Sequential:
         if not self._layers:
             raise ValueError("Sequential model has no layers")
         self._model = self._tf.sequential(_config(name=self._name))
+        previous_shape = (None, *shape)
         for i, layer in enumerate(self._layers):
             js_layer = layer._js_layer(shape if i == 0 else None)
             self._model.add(js_layer)
-            layer._input_shape = tuple(js_layer.inputShape.to_py())
-            layer._output_shape = tuple(js_layer.outputShape.to_py())
+            layer._input_shape = previous_shape
+            # TF.js layers expose symbolic output shapes through the model's
+            # output tensor, not through the Python-Keras inputShape property.
+            output_shape = tuple(self._model.outputs[0].shape.to_py())
+            layer._output_shape = output_shape
+            previous_shape = output_shape
         self._built_input_shape = shape
         self._built_n_features = shape[0] if len(shape) == 1 else shape
         if self._compile_options is not None:
