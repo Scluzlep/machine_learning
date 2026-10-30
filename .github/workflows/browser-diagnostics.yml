@@ -7,7 +7,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/browser-diagnostics.yml'
-      - 'tests/notebook-browser-suite.cjs'
+      - '.github/browser-diagnostics/notebook-browser-suite.cjs'
 
 permissions:
   contents: read
@@ -221,7 +221,7 @@ jobs:
         run: |
           mkdir -p notebook-report
           set +e
-          timeout --signal=INT --kill-after=20s 44m node tests/notebook-browser-suite.cjs 2>&1 | tee notebook-report/runner.log
+          timeout --signal=INT --kill-after=20s 44m node .github/browser-diagnostics/notebook-browser-suite.cjs 2>&1 | tee notebook-report/runner.log
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             echo "FAIL: Notebook runner returned $status; this is diagnostic-only." | tee -a notebook-report/runner.log
