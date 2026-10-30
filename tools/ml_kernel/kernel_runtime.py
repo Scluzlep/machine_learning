@@ -83,6 +83,10 @@ async def prepare_cell(code: str) -> str:
         return code
     if (re.search(r"(?:^|\n)\s*(?:import tensorflow|from tensorflow\b)", code)
             and "tensorflow" not in sys.modules):
+        # The kernel's regular dependency loader runs after this hook.
+        # NumPy is needed immediately by the TensorFlow.js bridge.
+        from pyodide_js import loadPackagesFromImports
+        await loadPackagesFromImports("import numpy")
         from .auto_tfjs.tfjs_compat import install
         await install()
     if "tensorflow" not in sys.modules:
