@@ -108,6 +108,7 @@ jobs:
           node tests/repl-zero-edit.cjs
           node tests/notebook-ui.cjs
           node tests/notebook-imports.cjs
+          node tests/repl-widget.cjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
