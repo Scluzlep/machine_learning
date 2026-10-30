@@ -8,6 +8,7 @@ on:
       - 'site-requirements.txt'
       - 'jupyter_lite_config.json'
       - 'overrides.json'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
