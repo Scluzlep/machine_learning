@@ -34,12 +34,20 @@ def verify(dist: Path | None = None) -> None:
     assert "repodata.json" in vendor and "pyodide.mjs" in vendor
 
     if dist is not None:
+        piplite_index = dist / "pypi/all.json"
+        assert piplite_index.is_file(), "Piplite addon missing: no wheel index"
+        piplite = json.loads(piplite_index.read_text(encoding="utf-8"))
+        assert "pyodide-kernel" in piplite, "Patched legacy kernel is absent from wheel index"
+        assert (dist / "pypi/pyodide_kernel-0.1.1-py3-none-any.whl").is_file()
         site = (dist / "jupyter-lite.json")
         assert site.is_file(), site
         config = json.loads(site.read_text(encoding="utf-8"))
         kernel = config["jupyter-config-data"]["litePluginSettings"][
             "@jupyterlite/pyodide-kernel-extension:kernel"]
         assert kernel["pyodideUrl"].endswith("/pyodide/pyodide.mjs")
+        assert any("pypi/all.json" in url for url in kernel.get("pipliteUrls", [])), (
+            "JupyterLite did not expose the local Pyodide kernel wheel index"
+        )
         assert not kernel.get("loadPyodideOptions"), "Modern settings in legacy kernel"
         pyodide_dir = dist / "pyodide"
         for name in ("pyodide.mjs", "pyodide.asm.wasm", "repodata.json"):

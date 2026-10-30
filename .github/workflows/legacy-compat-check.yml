@@ -55,14 +55,17 @@ jobs:
           PY
       - name: Compile isolated legacy JupyterLite frontend
         run: |
-          jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel
+          jupyter lite build --contents .ml-contents --output-dir dist
           test -s dist/lab/index.html
           test -s dist/jupyter-lite.json
           python - <<'PY'
           from pathlib import Path
           import json
           root=Path('dist')
-          assert list(root.rglob('pyodide_kernel-0.1.1-*.whl')), 'Patched kernel wheel absent'
+          assert (root/'pypi/all.json').is_file(), 'Piplite index absent: addon did not initialize'
+          assert (root/'pypi/pyodide_kernel-0.1.1-py3-none-any.whl').is_file(), 'Patched kernel wheel not indexed'
+          index=json.loads((root/'pypi/all.json').read_text())
+          assert 'pyodide-kernel' in index, f'Missing pyodide kernel package from index: {sorted(index)}'
           data=json.loads((root/'jupyter-lite.json').read_text())
           print('Legacy JupyterLite base site built:', sorted(data.keys()))
           PY

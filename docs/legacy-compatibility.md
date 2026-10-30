@@ -51,7 +51,7 @@ ABI and Python interpreter builds must match. The original environment contains
 
 ## Build without deploying
 
-Install the pinned `site-requirements.txt` in a separate Python 3.11
+The legacy `jupyter_lite_config.py` specifies `PipliteAddon.piplite_urls`\nas a **tuple**, because the CLI option accepted by modern JupyterLite breaks\nthis old addon. A successful static build without `dist/pypi/all.json`\nand the custom kernel wheel is an invalid build.\n\nInstall the pinned `site-requirements.txt` in a separate Python 3.11
 builder environment, then execute the build and test commands from the
 compat branch's `.github/workflows/pages.yml`. You may manually dispatch a
 build on the compat branch; it is prevented from uploading to GitHub Pages.
