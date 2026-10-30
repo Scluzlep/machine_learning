@@ -40,10 +40,12 @@ jobs:
         run: jupyter lite build --contents machine_learning --output-dir dist
       - name: Bundle TensorFlow.js for browser and Pyodide workers
         run: |
-          npm install --prefix .tfjs-vendor --no-save --ignore-scripts --no-audit --no-fund @tensorflow/tfjs@4.22.0
+          npm install --prefix .tfjs-vendor --no-save --ignore-scripts --no-audit --no-fund @tensorflow/tfjs@4.22.0 @tensorflow/tfjs-backend-webgpu@4.22.0
           mkdir -p dist/vendor
           cp .tfjs-vendor/node_modules/@tensorflow/tfjs/dist/tf.min.js dist/vendor/tf.min.js
+          cp .tfjs-vendor/node_modules/@tensorflow/tfjs-backend-webgpu/dist/tf-backend-webgpu.min.js dist/vendor/tf-backend-webgpu.min.js
           test -s dist/vendor/tf.min.js
+          test -s dist/vendor/tf-backend-webgpu.min.js
       - name: Verify notebook syntax and static resources
         run: |
           python -m compileall -q machine_learning/browser_ml
@@ -55,6 +57,7 @@ jobs:
           output=pathlib.Path('dist')
           assert (output/'lab/index.html').exists()
           assert (output/'vendor/tf.min.js').stat().st_size > 100000
+          assert (output/'vendor/tf-backend-webgpu.min.js').stat().st_size > 100000
           assert (output/'api/translations/zh_CN.json').exists()
           print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
           PY
