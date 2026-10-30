@@ -86,6 +86,10 @@ jobs:
         run: |
           npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@314.0.6
           python tools/ml_kernel/vendor_pyodide.py --dist dist --base-path /machine_learning
+      - name: Bundle Adobe Source Han Sans SC for Matplotlib
+        run: |
+          python -m pip install 'fonttools>=4.55,<5'
+          python tools/ml_kernel/vendor_chinese_font.py --output dist/assets/fonts
       - name: Bundle TensorFlow.js for browser and Pyodide workers
         run: |
           npm install --prefix .tfjs-vendor --no-save --ignore-scripts --no-audit --no-fund @tensorflow/tfjs@4.22.0 @tensorflow/tfjs-backend-webgpu@4.22.0
@@ -113,6 +117,8 @@ jobs:
           assert opts['pyodideUrl']=='/machine_learning/pyodide/pyodide.mjs'
           assert (output/'vendor/tf-backend-webgpu.min.js').stat().st_size > 100000
           assert (output/'vendor/course-losses.js').stat().st_size > 500
+          assert (output/'assets/fonts/SourceHanSansSC-Regular.otf').stat().st_size == 16529832
+          assert 'SIL OPEN FONT LICENSE' in (output/'assets/fonts/OFL-LICENSE.txt').read_text()
           assert (output/'api/translations/zh_CN.json').exists()
           assert any(output.rglob('pyodide_kernel-0.8.6-py3-none-any.whl')), 'Patched Pyodide kernel wheel not deployed'
           assert any(output.rglob('ipympl-*.whl')), 'ipympl Python wheel is not bundled'
