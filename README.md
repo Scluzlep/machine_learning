@@ -30,7 +30,13 @@ python -m http.server 8000 --directory dist
 - **交互绘图**：集成 ipywidgets / ipympl 前端组件，持续完善课程中的交互实验。
 - **环境记录**：`machine_learning/environment/` 保存了原始 Python、Conda 依赖版本，便于查阅和复现。
 
-原始 TensorFlow 实验的浏览器适配正在逐步完善；其他 Notebook 可以先在 Pyodide 环境中尝试运行。
+## 浏览器环境测试与 TensorFlow.js
+
+在文件浏览器中打开 **`浏览器环境自检.ipynb`**，可以依次检测 NumPy、SciPy、pandas、scikit-learn、Matplotlib、ipywidgets、ipympl 和 TensorFlow.js。
+
+神经网络章节新增 **`2a. CoffeeRoasting_TFJS.ipynb`**，在浏览器里训练咖啡烘焙分类模型，数据处理与画图继续使用 Python。TensorFlow.js 的 Python 桥接代码位于 `machine_learning/browser_ml/tfjs_bridge.py`。
+
+训练时使用 `await model.fit(...)`，计算直接在浏览器内完成。仓库的 GitHub Actions 也会使用 Chromium 运行 Pyodide、科学计算包和 TensorFlow.js 的自动测试。
 
 ## 自动部署
 
