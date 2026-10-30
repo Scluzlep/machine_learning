@@ -1,6 +1,15 @@
 name: Validate all JupyterLite notebooks
 
 on:
+  pull_request:
+    paths:
+      - 'machine_learning/**'
+      - 'site-requirements.txt'
+      - 'jupyter_lite_config.json'
+      - 'overrides.json'
+      - 'tools/ml_kernel/**'
+      - 'tests/notebook-full.cjs'
+      - '.github/workflows/notebook-validation.yml'
   workflow_dispatch:
   schedule:
     - cron: '0 2 * * 1'
