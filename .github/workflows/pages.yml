@@ -39,8 +39,17 @@ jobs:
         run: python -m pip install -r site-requirements.txt
       - name: Prepare zero-edit machine-learning Pyodide kernel
         run: |
-          python -m pip download --no-deps --only-binary=:all: --ignore-requires-python --dest .ml-upstream pyodide-kernel==0.8.3
-          python tools/ml_kernel/build_custom_kernel.py .ml-upstream/pyodide_kernel-0.8.3-py3-none-any.whl --output .ml-wheel
+          # pyodide-kernel is embedded in the installed JupyterLite labextension.
+          KERNEL_WHEEL="$(python - <<'PY'
+          from pathlib import Path
+          import sys
+          matches=list(Path(sys.prefix).rglob('pyodide_kernel-0.8.3-*.whl'))
+          if len(matches)!=1:
+              raise SystemExit(f'Expected one JupyterLite kernel wheel, found {matches}')
+          print(matches[0])
+          PY
+          )"
+          python tools/ml_kernel/build_custom_kernel.py "$KERNEL_WHEEL" --output .ml-wheel
           python tests/test-kernel-transform.py
       - name: Build static site
         run: jupyter lite build --contents machine_learning --output-dir dist --piplite-wheels .ml-wheel/pyodide_kernel-0.8.3-py3-none-any.whl
