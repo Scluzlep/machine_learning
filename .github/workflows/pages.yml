@@ -73,8 +73,10 @@ jobs:
           mkdir -p dist/vendor
           cp .tfjs-vendor/node_modules/@tensorflow/tfjs/dist/tf.min.js dist/vendor/tf.min.js
           cp .tfjs-vendor/node_modules/@tensorflow/tfjs-backend-webgpu/dist/tf-backend-webgpu.min.js dist/vendor/tf-backend-webgpu.min.js
+          cp machine_learning/browser_ml/course-losses.js dist/vendor/course-losses.js
           test -s dist/vendor/tf.min.js
           test -s dist/vendor/tf-backend-webgpu.min.js
+          test -s dist/vendor/course-losses.js
       - name: Verify notebook syntax and static resources
         run: |
           python -m compileall -q machine_learning/browser_ml
@@ -91,6 +93,7 @@ jobs:
           opts=js['jupyter-config-data']['litePluginSettings']['@jupyterlite/pyodide-kernel-extension:kernel']
           assert opts['pyodideUrl']=='/machine_learning/pyodide/pyodide.mjs'
           assert (output/'vendor/tf-backend-webgpu.min.js').stat().st_size > 100000
+          assert (output/'vendor/course-losses.js').stat().st_size > 500
           assert (output/'api/translations/zh_CN.json').exists()
           assert any(output.rglob('pyodide_kernel-0.8.6-py3-none-any.whl')), 'Patched Pyodide kernel wheel not deployed'
           print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
