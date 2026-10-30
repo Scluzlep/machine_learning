@@ -61,8 +61,27 @@ jobs:
           assert json.loads(original.read_text())['metadata']['kernelspec']['name'] == 'python3'
           assert json.loads(deployed.read_text())['metadata']['kernelspec']['name'] == 'python'
           PY
+      - name: Bundle Python widget and plotting wheels with the static site
+        run: |
+          # Match the exact ipympl/ipywidgets front-end extensions installed above.
+          python - <<'PY'
+          from importlib.metadata import version
+          from pathlib import Path
+          import subprocess
+          import sys
+          wheel_dir = Path('.ml-wheel')
+          packages = [f'ipympl=={version("ipympl")}',
+                      f'ipywidgets=={version("ipywidgets")}',
+                      'seaborn==0.13.2']
+          subprocess.run(
+              [sys.executable, '-m', 'pip', 'download', '--no-deps',
+               '--only-binary=:all:', '--dest', str(wheel_dir), *packages],
+              check=True
+          )
+          print('Bundled course widget wheels:', sorted(x.name for x in wheel_dir.glob('*.whl')))
+          PY
       - name: Build static site
-        run: jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel/pyodide_kernel-0.8.6-py3-none-any.whl
+        run: jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel
       - name: Self-host Pyodide WebAssembly and standard library
         run: |
           npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@314.0.6
@@ -96,6 +115,9 @@ jobs:
           assert (output/'vendor/course-losses.js').stat().st_size > 500
           assert (output/'api/translations/zh_CN.json').exists()
           assert any(output.rglob('pyodide_kernel-0.8.6-py3-none-any.whl')), 'Patched Pyodide kernel wheel not deployed'
+          assert any(output.rglob('ipympl-*.whl')), 'ipympl Python wheel is not bundled'
+          assert any(output.rglob('ipywidgets-*.whl')), 'ipywidgets Python wheel is not bundled'
+          assert any(output.rglob('seaborn-*.whl')), 'seaborn Python wheel is not bundled'
           print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
           PY
       - name: Test scientific WASM packages and TensorFlow.js in Chromium
