@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require(process.cwd() + '/.browser-test/node_modules/playwright');
 
-const source = path.resolve('.ml-contents');
+const source = path.resolve('machine_learning');
 const reportDir = path.resolve('notebook-validation');
 const shard = Number(process.env.NOTEBOOK_SHARD || 0);
 const shards = Number(process.env.NOTEBOOK_SHARDS || 1);
