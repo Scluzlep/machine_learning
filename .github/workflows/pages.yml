@@ -84,6 +84,7 @@ jobs:
           cp machine_learning/browser_ml/tfjs_bridge.py dist/vendor/tfjs_bridge.py
           cp machine_learning/browser_ml/tfjs_compat.py dist/vendor/tfjs_compat.py
           node tests/browser-smoke.cjs
+          node tests/repl-zero-edit.cjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
