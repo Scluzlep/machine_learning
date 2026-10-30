@@ -38,7 +38,7 @@ data = original.read_bytes()
 object_id = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
 assert object_id == "c5fbceb7612f7aef47e23cff40d137916823156e", object_id
 
-wheel = root / ".ml-wheel/pyodide_kernel-0.8.6-py3-none-any.whl"
+wheel = root / ".ml-wheel/pyodide_kernel-0.1.1-py3-none-any.whl"
 with zipfile.ZipFile(wheel) as archive:
     assert archive.testzip() is None
     kernel = archive.read("pyodide_kernel/kernel.py").decode()
@@ -46,6 +46,9 @@ with zipfile.ZipFile(wheel) as archive:
     assert "pyodide_kernel/auto_tfjs/tfjs_bridge.py" in archive.namelist()
     assert "pyodide_kernel/kernel_runtime.py" in archive.namelist()
     assert "pyodide_kernel/legacy_scikit.py" in archive.namelist()
+    assert "pyodide_kernel/legacy_numpy.py" in archive.namelist()
+    assert "pyodide_kernel/legacy_scipy.py" in archive.namelist()
+    assert "except Exception as _legacy_error" in kernel
     assert "pyodide_kernel/legacy_data/boston_house_prices.csv" in archive.namelist()
     assert archive.read("pyodide_kernel/legacy_data/boston_house_prices.csv").startswith(b"506,13")
 

@@ -142,7 +142,7 @@ async def prepare_cell(code: str) -> str:
         await loadPackagesFromImports("import sklearn")
         from .legacy_scikit import install_linear_regression
         install_linear_regression()
-    if "scipy.misc" in code and re.search(r"\\b(?:imread|imresize|imsave)\\b", code):
+    if re.search(r"\b(?:scipy\.misc|misc\.(?:imread|imresize|imsave))\b", code):
         from pyodide_js import loadPackage
         await loadPackage(["scipy", "Pillow"])
         from .legacy_scipy import install as install_scipy

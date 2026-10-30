@@ -18,7 +18,7 @@ from urllib.request import urlopen
 
 PYODIDE_VERSION = "0.23.4"
 FALLBACK = f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
-CORE = ("pyodide.js", "pyodide.asm.js", "pyodide.asm.wasm",
+CORE = ("pyodide.js", "pyodide.mjs", "pyodide.asm.js", "pyodide.asm.wasm",
         "python_stdlib.zip", "repodata.json")
 COURSE_PACKAGES = ("numpy", "scipy", "pandas", "matplotlib",
                    "scikit-learn", "micropip")

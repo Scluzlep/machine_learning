@@ -277,7 +277,18 @@ class Sequential:
             raise TypeError("Unsupported compile arguments: " + ", ".join(kwargs))
         if loss is None:
             loss = MeanSquaredError()
-        if optimizer is None:
+        if isinstance(loss, str):
+            # Keras 2 snake_case loss names differ from TF.js camelCase names.
+            names = {
+                "mse": MeanSquaredError, "meansquarederror": MeanSquaredError,
+                "binarycrossentropy": BinaryCrossentropy,
+                "categoricalcrossentropy": CategoricalCrossentropy,
+                "sparsecategoricalcrossentropy": SparseCategoricalCrossentropy,
+            }
+            factory = names.get(loss.replace("_", "").lower())
+            if factory is not None:
+                loss = factory()
+        if optimizer is None or optimizer == "adam":
             optimizer = Adam()
         if not isinstance(optimizer, Adam):
             raise TypeError("Only Adam is currently supported")
@@ -387,7 +398,7 @@ async def install(backend="auto"):
     keras = _module("tensorflow.keras", Sequential=Sequential, Input=Input,
                     layers=layers, activations=activations, losses=losses,
                     optimizers=optimizers, regularizers=regularizers, backend=keras_backend,
-                     models=models, __version__="tfjs-compat")
+                     models=models, __version__="2.6.0+tfjs-compat")
     # TensorFlow.js-backed eager operations. NumPy inputs preserve the existing
     # teaching-course semantics for tf.nn.softmax and Keras activations, while
     # GPU Tensor inputs stay on the active backend (and remain differentiable).
@@ -425,6 +436,7 @@ async def install(backend="auto"):
         concat=eager.concat, one_hot=eager.one_hot,
         clip_by_value=eager.clip_by_value, math=math, linalg=linalg,
         nn=nn, random=random,
+        __version__="2.6.0+tfjs-compat",
         autograph=types.SimpleNamespace(set_verbosity=lambda *_: None),
     )
     return tf

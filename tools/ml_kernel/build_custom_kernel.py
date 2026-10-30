@@ -23,7 +23,14 @@ def transform_kernel(src: bytes) -> bytes:
     replacement = marker + (
         "        # Browser ML: adapt execution without editing user cells.\n"
         "        from .kernel_runtime import prepare_cell as _prepare_ml_cell\n"
-        "        code = await _prepare_ml_cell(code)\n"
+        "        try:\n"
+        "            code = await _prepare_ml_cell(code)\n"
+        "        except Exception as _legacy_error:\n"
+        "            import traceback as _tb\n"
+        "            return dict(status='error', ename=type(_legacy_error).__name__,\n"
+        "                        evalue=str(_legacy_error), traceback=_tb.format_exception(\n"
+        "                            type(_legacy_error), _legacy_error,\n"
+        "                            _legacy_error.__traceback__))\n"
     )
     return source.replace(marker, replacement, 1).encode("utf-8")
 
@@ -39,6 +46,10 @@ def build(wheel: Path, root: Path, destination: Path) -> Path:
     files["pyodide_kernel/imports_bootstrap.py"] = (root / "tools/ml_kernel/imports_bootstrap.py").read_bytes()
     files["pyodide_kernel/chinese_font.py"] = (root / "tools/ml_kernel/chinese_font.py").read_bytes()
     files["pyodide_kernel/legacy_scikit.py"] = (root / "tools/ml_kernel/legacy_scikit.py").read_bytes()
+    for filename in ("legacy_numpy.py", "legacy_scipy.py"):
+        files["pyodide_kernel/" + filename] = (
+            root / "tools/ml_kernel" / filename
+        ).read_bytes()
     files["pyodide_kernel/legacy_data/boston_house_prices.csv"] = (
         root / "tools/ml_kernel/legacy_data/boston_house_prices.csv"
     ).read_bytes()

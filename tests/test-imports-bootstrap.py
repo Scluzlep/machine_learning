@@ -17,6 +17,7 @@ assert "from lab_utils_uni import" in cell
 found = module.discover(cell, lesson)
 assert "ipywidgets" in found, (found, cell)
 assert module.discover("import numpy as np", lesson) == set()
+assert module.discover("import h5py", lesson) == {"h5py"}
 assert module.discover("%matplotlib widget\nimport matplotlib.pyplot as plt", lesson) == {"ipympl", "ipywidgets"}
 assert module.discover("get_ipython().run_line_magic('matplotlib', 'widget')", lesson) == {"ipympl", "ipywidgets"}
 assert module.discover("get_ipython().run_line_magic('matplotlib', 'ipympl')", lesson) == {"ipympl", "ipywidgets"}
