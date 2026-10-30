@@ -29,7 +29,10 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
               + "reg=LinearRegression().fit([[1],[2],[3]],[3,5,7])\\n"
               + "assert abs(reg.predict([[4]])[0]-9)<1e-3\\n"
               + "import tfjs_bridge\\n"
-              + "await tfjs_bridge.load_tfjs('"+data.tfjs+"')\\n"
+              + "await tfjs_bridge.load_tfjs('"+data.tfjs+"', backend='cpu')\\n"
+              + "assert tfjs_bridge.backend() == 'cpu'\\n"
+              + "await tfjs_bridge.load_tfjs('"+data.tfjs+"', backend='auto')\\n"
+              + "assert tfjs_bridge.backend() in ('webgpu', 'webgl', 'cpu')\\n"
               + "model=tfjs_bridge.Sequential([tfjs_bridge.Dense(4,'relu',input_shape=(2,)),tfjs_bridge.Dense(1,'sigmoid')])\\n"
               + "model.compile(loss='binaryCrossentropy',learning_rate=0.05)\\n"
               + "X=np.asarray([[0,0],[0,1],[1,0],[1,1]]*5,dtype='float32')\\n"
@@ -38,7 +41,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
               + "pred=model.predict(X)\\n"
               + "assert pred.shape == y.shape\\n"
               + "print('Pyodide WASM scientific imports PASS; TensorFlow.js worker training PASS')\\n"
-              + "tfjs_bridge.backend()"
+              + "str(tfjs_bridge.backend_info())"
             );
             self.postMessage({ok:true,backend:output});
           } catch (err) {self.postMessage({ok:false,error:String(err),stack:err.stack})}
@@ -52,7 +55,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
         worker.postMessage({bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,tfjs:src});
       });
     },port);
-    console.log(JSON.stringify(outcome));
+    console.log('Browser scientific/TensorFlow.js backend test:', JSON.stringify(outcome));
     assert.equal(outcome.ok,true,outcome.error+'\n'+outcome.stack);
   } finally {
     if (browser) await browser.close();
