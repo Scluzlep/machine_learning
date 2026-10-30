@@ -1,0 +1,68 @@
+name: Legacy kernel build check (compat only)
+
+on:
+  # One initial, isolated run when this check is first added. Future runtime
+  # updates never consume Actions minutes unless explicitly re-dispatched.
+  push:
+    branches:
+      - compat/pyodide-legacy-course
+    paths:
+      - '.github/workflows/legacy-compat-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  legacy-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned legacy JupyterLite builder
+        run: python -m pip install -r site-requirements.txt
+      - name: Patch 0.1.1 kernel and test untouched Notebooks
+        run: |
+          KERNEL_WHEEL="$(python - <<'PY'
+          import sys
+          from pathlib import Path
+          matches=list(Path(sys.prefix).rglob('pyodide_kernel-0.1.1-*.whl'))
+          assert len(matches)==1, f'Unexpected kernel wheels: {matches}'
+          print(matches[0])
+          PY
+          )"
+          python tools/ml_kernel/build_custom_kernel.py "$KERNEL_WHEEL" --output .ml-wheel
+          python tests/test-notebook-integrity.py
+          python tests/test-kernel-transform.py
+          python tests/test-imports-bootstrap.py
+          python tests/test-legacy-versions.py
+          python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
+          python tests/test-notebook-integrity.py --staged .ml-contents
+      - name: Bundle historical ipympl, ipywidgets and seaborn wheels
+        run: |
+          python - <<'PY'
+          from importlib.metadata import version
+          from pathlib import Path
+          import subprocess, sys
+          packages=[f'ipywidgets=={version("ipywidgets")}',
+                    f'ipympl=={version("ipympl")}', 'seaborn==0.11.2']
+          subprocess.run([sys.executable,'-m','pip','download','--no-deps',
+                          '--only-binary=:all:','--dest','.ml-wheel',*packages],check=True)
+          print('Bundled legacy wheels:',[p.name for p in Path('.ml-wheel').glob('*.whl')])
+          PY
+      - name: Compile isolated legacy JupyterLite frontend
+        run: |
+          jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel
+          test -s dist/lab/index.html
+          test -s dist/jupyter-lite.json
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          root=Path('dist')
+          assert list(root.rglob('pyodide_kernel-0.1.1-*.whl')), 'Patched kernel wheel absent'
+          data=json.loads((root/'jupyter-lite.json').read_text())
+          print('Legacy JupyterLite base site built:', sorted(data.keys()))
+          PY
