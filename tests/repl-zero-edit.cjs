@@ -27,7 +27,7 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
     const url = `http://127.0.0.1:${port}/repl/index.html?kernel=python&code=${encodeURIComponent(python)}`;
     const response = await page.goto(url, {waitUntil:'domcontentloaded', timeout:60000});
     assert.equal(response.status(), 200, 'JupyterLite REPL must be available');
-    await page.waitForFunction(() => document.body.innerText.includes('ML_KERNEL_ZERO_EDIT_OK'), null, {timeout:120000});
+    await page.waitForFunction(() => [...document.querySelectorAll('.jp-OutputArea-output')].some(node => node.textContent.includes('ML_KERNEL_ZERO_EDIT_OK')), null, {timeout:120000});
     console.log('Original Python TensorFlow syntax executed successfully in custom JupyterLite kernel');
   } finally {
     if (browser) await browser.close();
