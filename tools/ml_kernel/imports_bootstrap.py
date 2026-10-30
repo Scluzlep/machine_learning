@@ -56,6 +56,43 @@ def _local_path(directory: Path, modname: str):
     return None
 
 
+def _uses_widget_backend(code: str) -> bool:
+    """Detect original %matplotlib widget and IPython-transformed magic."""
+    if re.search(r"^\s*%matplotlib\s+(?:widget|ipympl)\b", code, re.MULTILINE):
+        return True
+    tree = _parse(code)
+    if tree is None:
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if not (isinstance(fn, ast.Attribute) and fn.attr == "run_line_magic"):
+            continue
+        if len(node.args) < 2:
+            continue
+        first, second = node.args[:2]
+        if (isinstance(first, ast.Constant) and first.value == "matplotlib"
+                and isinstance(second, ast.Constant)
+                and second.value in ("widget", "ipympl")):
+            return True
+    return False
+
+
+def _register_ipympl_backends() -> None:
+    """Refresh aliases when Matplotlib cached entry points before ipympl install.
+
+    ipympl provides both 'widget' and 'ipympl' Matplotlib backend aliases.
+    Register them directly to avoid Matplotlib's one-time entry point scan.
+    """
+    from matplotlib.backends import backend_registry
+    import ipympl.backend_nbagg
+    for name in ("widget", "ipympl"):
+        backend_registry._name_to_module[name] = "module://ipympl.backend_nbagg"
+        backend_registry._backend_to_gui_framework.setdefault(name, "unknown")
+    backend_registry.resolve_backend("widget")
+
+
 def discover(code: str, directory: Path | None = None) -> set[str]:
     """Find optional packages needed by imports in a cell and its local helpers."""
     directory = directory or Path.cwd()
@@ -64,7 +101,7 @@ def discover(code: str, directory: Path | None = None) -> set[str]:
     seen = set()
 
     # Handle notebook magic prior to IPython's input transformations.
-    if re.search(r"^\s*%matplotlib\s+(?:widget|ipympl)\b", code, re.MULTILINE):
+    if _uses_widget_backend(code):
         targets.update(("ipywidgets", "ipympl"))
 
     while todo and len(seen) < _MAX_MODULES:
@@ -109,3 +146,5 @@ async def install_missing(code: str):
                 raise ModuleNotFoundError(
                     f"{name} installation completed but Python cannot import it"
                 )
+    if _uses_widget_backend(code):
+        _register_ipympl_backends()
