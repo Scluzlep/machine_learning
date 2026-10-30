@@ -30,7 +30,7 @@ def _config(**kwargs):
     return to_js(kwargs, dict_converter=globalThis.Object.fromEntries)
 
 
-def _asset_url():
+def _asset_url(asset_name="tf.min.js"):
     loc = urlsplit(str(globalThis.location.href))
     path = loc.path
     for marker in ("/lab/", "/notebooks/", "/tree/", "/api/", "/extensions/", "/build/"):
@@ -39,7 +39,7 @@ def _asset_url():
             break
     else:
         path = path.rstrip("/").rsplit("/", 1)[0]
-    return f"{loc.scheme}://{loc.netloc}{path}/vendor/tf.min.js"
+    return f"{loc.scheme}://{loc.netloc}{path}/vendor/{asset_name}"
 
 
 
