@@ -9,6 +9,7 @@ const reportDir = path.resolve('notebook-validation');
 const shard = Number(process.env.NOTEBOOK_SHARD || 0);
 const shards = Number(process.env.NOTEBOOK_SHARDS || 1);
 const timeout = Number(process.env.NOTEBOOK_TIMEOUT_MS || 900000);
+const headed = process.env.NOTEBOOK_HEADED === '1';
 assert(Number.isInteger(shard) && Number.isInteger(shards) && shards > 0 && shard >= 0 && shard < shards);
 
 function notebooks(dir, root = dir) {
@@ -27,11 +28,15 @@ const selected = all.filter((_, i) => i % shards === shard);
 fs.mkdirSync(reportDir, { recursive: true });
 
 const port = 8790;
-const root = path.resolve('.site-test-root');
-const mount = path.join(root, 'machine_learning');
-fs.mkdirSync(root, { recursive: true });
-if (!fs.existsSync(mount)) fs.symlinkSync(path.resolve('dist'), mount, 'dir');
-const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
+const siteUrl = process.env.NOTEBOOK_SITE_URL || `http://127.0.0.1:${port}/machine_learning/lab/`;
+let server;
+if (!process.env.NOTEBOOK_SITE_URL) {
+  const root = path.resolve('.site-test-root');
+  const mount = path.join(root, 'machine_learning');
+  fs.mkdirSync(root, { recursive: true });
+  if (!fs.existsSync(mount)) fs.symlinkSync(path.resolve('dist'), mount, 'dir');
+  server = spawn('python', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
+}
 
 async function runNotebook(browser, relativePath) {
   const started = Date.now();
@@ -44,7 +49,7 @@ async function runNotebook(browser, relativePath) {
   const context = await browser.newContext();
   const page = await context.newPage();
   try {
-    const response = await page.goto(`http://127.0.0.1:${port}/machine_learning/lab/`, {
+    const response = await page.goto(siteUrl, {
       waitUntil: 'domcontentloaded', timeout: 60000,
     });
     assert.equal(response.status(), 200);
@@ -101,7 +106,7 @@ async function runNotebook(browser, relativePath) {
   let browser;
   const results = [];
   try {
-    browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+    browser = await chromium.launch({ headless: !headed, args: ['--no-sandbox'] });
     for (const notebook of selected) {
       const result = await runNotebook(browser, notebook);
       results.push(result);
@@ -111,7 +116,7 @@ async function runNotebook(browser, relativePath) {
     }
   } finally {
     if (browser) await browser.close();
-    server.kill();
+    if (server) server.kill();
   }
   const failed = results.filter(result => result.status === 'failed');
   console.log(JSON.stringify({ discovered: all.length, selected: selected.length, passed: results.filter(x => x.status === 'passed').length, excluded: results.filter(x => x.status === 'excluded').length, failed: failed.length }));
@@ -119,6 +124,6 @@ async function runNotebook(browser, relativePath) {
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;
-  server.kill();
+  if (server) server.kill();
 });
 
