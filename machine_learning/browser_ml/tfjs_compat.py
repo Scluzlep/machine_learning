@@ -129,6 +129,7 @@ class Sequential:
                     "this adapter currently trains Dense networks"
                 )
         self._model = bridge.Sequential(layer_defs, name=name)
+        self._sparse_target_classes = None
 
     @property
     def layers(self):
@@ -163,11 +164,19 @@ class Sequential:
             optimizer = Adam()
         if not isinstance(optimizer, Adam):
             raise TypeError("Only Adam is currently supported")
+        self._sparse_target_classes = None
         if isinstance(loss, _Loss):
-            if loss.from_logits:
+            if isinstance(loss, SparseCategoricalCrossentropy):
+                if not self.layers:
+                    raise ValueError("Sparse categorical loss requires an output layer")
+                self._sparse_target_classes = self.layers[-1].units
+                fn_name = ("sparseCategoricalCrossentropyFromLogits"
+                           if loss.from_logits else
+                           "sparseCategoricalCrossentropyProbabilities")
+                loss_value = getattr(globalThis.mlCourseLosses, fn_name)
+            elif loss.from_logits:
                 fn_name = {
                     BinaryCrossentropy: "binaryCrossentropyFromLogits",
-                    SparseCategoricalCrossentropy: "sparseCategoricalCrossentropyFromLogits",
                 }.get(type(loss))
                 if not fn_name:
                     raise NotImplementedError(
@@ -187,6 +196,19 @@ class Sequential:
                   verbose=0, shuffle=True, **kwargs):
         if kwargs:
             raise TypeError("Unsupported fit arguments: " + ", ".join(kwargs))
+        # TF.js Layers validates y shape before invoking a custom loss.
+        # Convert Keras integer labels to the expected one-hot tensor here;
+        # the original Notebook and its NumPy integer labels stay unchanged.
+        if self._sparse_target_classes is not None:
+            values = np.asarray(y).reshape(-1)
+            if len(values) != len(X):
+                raise ValueError("Classification labels must match X rows")
+            n_classes = self._sparse_target_classes
+            if np.any(values < 0) or np.any(values >= n_classes):
+                raise ValueError("Labels must be in 0..number_of_classes-1")
+            if not np.all(values == values.astype(np.int32)):
+                raise ValueError("Sparse categorical labels must be integers")
+            y = np.eye(n_classes, dtype=np.float32)[values.astype(np.int32)]
         data = await self._model.fit(X, y, epochs=epochs,
                                      batch_size=batch_size, verbose=verbose,
                                      shuffle=shuffle)
