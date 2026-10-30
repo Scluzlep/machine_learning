@@ -58,6 +58,12 @@ jobs:
           assert (output/'api/translations/zh_CN.json').exists()
           print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
           PY
+      - name: Test scientific WASM packages and TensorFlow.js in Chromium
+        run: |
+          npm install --prefix .browser-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          .browser-test/node_modules/.bin/playwright install chromium
+          cp machine_learning/browser_ml/tfjs_bridge.py dist/vendor/tfjs_bridge.py
+          node tests/browser-smoke.cjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
