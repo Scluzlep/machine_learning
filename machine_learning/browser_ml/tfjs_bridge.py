@@ -110,7 +110,7 @@ async def load_tfjs(url=None, backend="auto", webgpu_url=None):
                 if not _worker_has_webgpu():
                     raise RuntimeError("navigator.gpu unavailable in the kernel Worker")
                 if not _webgpu_loaded:
-                    await _load_script(webgpu_url or _asset_url("tf-backend-webgpu.min.js"))
+                    await _load_script(webgpu_url or (url.rsplit("/", 1)[0] + "/tf-backend-webgpu.min.js" if url else _asset_url("tf-backend-webgpu.min.js")))
                     _webgpu_loaded = True
             await _activate_backend(candidate)
             return _tf
