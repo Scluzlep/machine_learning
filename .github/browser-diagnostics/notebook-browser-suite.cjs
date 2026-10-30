@@ -84,6 +84,9 @@ async function collect(page,source,tracking,rel) {
   if(model && Array.isArray(model.cells)) {
     const code=model.cells.filter(c=>c.cell_type==='code');
     const cells=source.code.map((cell,index)=>{
+      if(!cell.source.trim()) return {cellIndex:cell.cellIndex,codeIndex:index,
+        source:'',status:'SKIP',reason:'Intentionally empty code cell',
+        executionCount:null,outputs:[],hasError:false};
       const current=code[index];
       const outputs=(current?.outputs||[]).map(o=>{
         const data=o.data||{};
@@ -108,6 +111,7 @@ async function collect(page,source,tracking,rel) {
       sourceCodeCells:source.code.length,modelCodeCells:code.length,
       pass:cells.filter(c=>c.status==='PASS').length,
       fail:cells.filter(c=>c.status==='FAIL').length,
+      skippedEmpty:cells.filter(c=>c.status==='SKIP').length,
       unexecuted:cells.filter(c=>c.status==='NOT_EXECUTED').length};
   }
   // Explicitly report incomplete coverage rather than falsely claiming PASS.
@@ -298,10 +302,10 @@ function summary() {
     'Suite: '+suite,'',
     '**'+results.length+' notebooks: '+counts.PASS+' PASS / '+counts.FAIL+' FAIL / '+counts.SKIP+' SKIP**',
     '',
-    '| Notebook | Status | Code cells | Executed | Python errors | Seconds |',
-    '| --- | --- | ---: | ---: | ---: | ---: |',
+    '| Notebook | Status | Code cells | Executed | Empty skipped | Python errors | Seconds |',
+    '| --- | --- | ---: | ---: | ---: | ---: | ---: |',
     ...results.map(r=>'| '+r.path.replace(/\|/g,'\\|')+' | '+r.status+' | '+
-      r.sourceCodeCells+' | '+(r.execution?.pass||0)+' | '+(r.execution?.fail||0)+
+      r.sourceCodeCells+' | '+(r.execution?.pass||0)+' | '+(r.execution?.skippedEmpty||0)+' | '+(r.execution?.fail||0)+
       ' | '+(r.durationSeconds||0)+' |'),'',
     'Each notebook has its own JSON cell-output report and JSONL browser/network log. FAIL does not affect Action status.'
   ].join('\n')+'\n';
@@ -319,7 +323,7 @@ async function main() {
     log('START',file);
     const r=await recordNotebook(file);
     results.push(r);
-    log(r.status,file+'; code='+r.sourceCodeCells+'; executed='+(r.execution?.pass||0)+
+    log(r.status,file+'; code='+r.sourceCodeCells+'; executed='+(r.execution?.pass||0)+'; emptySkipped='+(r.execution?.skippedEmpty||0)+
       '; errors='+(r.execution?.fail||0)+'; elapsed='+(r.durationSeconds||0)+'s');
     if(r.errors?.length)r.errors.forEach(e=>log('ERROR',file+' '+e.slice(0,2500)));
     summary();
