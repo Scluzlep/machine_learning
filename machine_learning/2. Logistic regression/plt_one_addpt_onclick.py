@@ -168,7 +168,11 @@ class plt_one_addpt_onclick:
         self.fig.canvas.draw()
 
     def resize_sq(self, bcid):
-        """ resizes the check box """
+        """Resizes legacy checkbox artists when available."""
+        # Matplotlib 3.10+ CheckButtons uses collections and no longer exposes
+        # rectangles or lines. This adjustment is cosmetic, so skip it there.
+        if not hasattr(bcid, "rectangles") or not hasattr(bcid, "lines"):
+            return
         #future reference
         #print(f"width  : {bcid.rectangles[0].get_width()}")
         #print(f"height : {bcid.rectangles[0].get_height()}")
