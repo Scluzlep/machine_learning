@@ -43,7 +43,7 @@ def build(wheel: Path, root: Path, destination: Path) -> Path:
         root / "tools/ml_kernel/legacy_data/boston_house_prices.csv"
     ).read_bytes()
     files["pyodide_kernel/auto_tfjs/__init__.py"] = b""
-    for name in ("tfjs_bridge.py", "tfjs_compat.py"):
+    for name in ("tfjs_bridge.py", "tfjs_compat.py", "tfjs_tensor.py"):
         files["pyodide_kernel/auto_tfjs/" + name] = (
             root / "machine_learning/browser_ml" / name
         ).read_bytes()

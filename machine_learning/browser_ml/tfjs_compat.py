@@ -12,6 +12,7 @@ import warnings
 import numpy as np
 from js import globalThis
 from . import tfjs_bridge as bridge
+from . import tfjs_tensor as eager
 
 
 class _Tensor:
@@ -383,8 +384,43 @@ async def install(backend="auto"):
                     layers=layers, activations=activations, losses=losses,
                     optimizers=optimizers, regularizers=regularizers, backend=keras_backend,
                      models=models, __version__="tfjs-compat")
-    tf = _module("tensorflow", keras=keras,
-                 random=types.SimpleNamespace(set_seed=np.random.seed),
-                 autograph=types.SimpleNamespace(set_verbosity=lambda *_: None),
-                 nn=types.SimpleNamespace(softmax=_softmax))
+    # TensorFlow.js-backed eager operations. NumPy inputs preserve the existing
+    # teaching-course semantics for tf.nn.softmax and Keras activations, while
+    # GPU Tensor inputs stay on the active backend (and remain differentiable).
+    def nn_softmax(value, axis=-1):
+        return eager.softmax(value, axis) if isinstance(value, eager.Tensor) else _softmax(value, axis)
+
+    def nn_sigmoid(value):
+        return eager.sigmoid(value) if isinstance(value, eager.Tensor) else _sigmoid(value)
+
+    def nn_relu(value):
+        return eager.relu(value) if isinstance(value, eager.Tensor) else _relu(value)
+
+    math = _module("tensorflow.math", exp=eager.exp, log=eager.log,
+                   sqrt=eager.sqrt, square=eager.square, sigmoid=nn_sigmoid,
+                   tanh=eager.tanh, abs=eager.abs, maximum=eager.maximum,
+                   minimum=eager.minimum)
+    linalg = _module("tensorflow.linalg", matmul=eager.matmul)
+    nn = _module("tensorflow.nn", softmax=nn_softmax, sigmoid=nn_sigmoid,
+                 relu=nn_relu)
+    random = _module("tensorflow.random", set_seed=np.random.seed,
+                     normal=eager.random_normal, uniform=eager.random_uniform)
+    tf = _module(
+        "tensorflow", keras=keras, Tensor=eager.Tensor, Variable=eager.Variable,
+        float32=eager.float32, int32=eager.int32, bool=eager.bool,
+        constant=eager.constant, convert_to_tensor=eager.convert_to_tensor,
+        is_tensor=eager.is_tensor, cast=eager.cast, matmul=eager.matmul,
+        add=eager.add, subtract=eager.subtract, multiply=eager.multiply,
+        divide=eager.divide, square=eager.square, sqrt=eager.sqrt,
+        exp=eager.exp, reshape=eager.reshape, transpose=eager.transpose,
+        expand_dims=eager.expand_dims, squeeze=eager.squeeze,
+        reduce_sum=eager.reduce_sum, reduce_mean=eager.reduce_mean,
+        reduce_max=eager.reduce_max, reduce_min=eager.reduce_min,
+        ones=eager.ones, zeros=eager.zeros, ones_like=eager.ones_like,
+        zeros_like=eager.zeros_like, eye=eager.eye, stack=eager.stack,
+        concat=eager.concat, one_hot=eager.one_hot,
+        clip_by_value=eager.clip_by_value, math=math, linalg=linalg,
+        nn=nn, random=random,
+        autograph=types.SimpleNamespace(set_verbosity=lambda *_: None),
+    )
     return tf

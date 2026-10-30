@@ -139,6 +139,7 @@ jobs:
           .browser-test/node_modules/.bin/playwright install chromium
           cp machine_learning/browser_ml/tfjs_bridge.py dist/vendor/tfjs_bridge.py
           cp machine_learning/browser_ml/tfjs_compat.py dist/vendor/tfjs_compat.py
+          cp machine_learning/browser_ml/tfjs_tensor.py dist/vendor/tfjs_tensor.py
           node tests/browser-smoke.cjs
           node tests/repl-zero-edit.cjs
           node tests/notebook-ui.cjs

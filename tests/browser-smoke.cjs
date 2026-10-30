@@ -39,6 +39,8 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
             py.FS.writeFile('/home/pyodide/browser_ml/tfjs_bridge.py', script);
             const compatText = await (await fetch(data.compat)).text();
             py.FS.writeFile('/home/pyodide/browser_ml/tfjs_compat.py', compatText);
+            const tensorText = await (await fetch(data.tensor)).text();
+            py.FS.writeFile('/home/pyodide/browser_ml/tfjs_tensor.py', tensorText);
             const output = await py.runPythonAsync(
                 "import numpy as np, scipy, pandas, matplotlib, sklearn\\n"
               + "from sklearn.linear_model import LinearRegression\\n"
@@ -123,6 +125,27 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
               + "assert len(await m4.get_weights_async())==4\\n"
               + "m4.dispose()\\n"
             );
+            await py.runPythonAsync(
+                "import tensorflow as tf\\n"
+              + "import numpy as np\\n"
+              + "assert tf.is_tensor(tf.constant([1.,2.]))\\n"
+              + "x=tf.constant([[1.,2.],[3.,4.]])\\n"
+              + "assert x.shape==(2,2) and x.dtype=='float32'\\n"
+              + "np.testing.assert_allclose((x+1).numpy(),[[2,3],[4,5]])\\n"
+              + "np.testing.assert_allclose(tf.matmul(x,x).numpy(),[[7,10],[15,22]])\\n"
+              + "assert np.isclose(float(tf.reduce_sum(x)),10.)\\n"
+              + "assert np.isclose(float(tf.reduce_mean(x)),2.5)\\n"
+              + "np.testing.assert_allclose(tf.nn.softmax(tf.constant([[1.,2.]])).numpy().sum(axis=1),[1.])\\n"
+              + "np.testing.assert_allclose((await x.numpy_async()),[[1,2],[3,4]])\\n"
+              + "np.testing.assert_allclose(tf.reshape(x,[4]).numpy(),[1,2,3,4])\\n"
+              + "np.testing.assert_allclose(tf.one_hot([0,2],3).numpy(),[[1,0,0],[0,0,1]])\\n"
+              + "v=tf.Variable([2.,3.])\\n"
+              + "v.assign_add([1.,1.])\\n"
+              + "np.testing.assert_allclose(v.numpy(),[3,4])\\n"
+              + "from browser_ml.tfjs_tensor import grad\\n"
+              + "g=grad(lambda t: tf.reduce_sum(t*t))(tf.constant([1.,2.,3.]))\\n"
+              + "np.testing.assert_allclose(g.numpy(),[2,4,6])\\n"
+            );
             self.postMessage({ok:true,backend:output});
           } catch (err) {self.postMessage({ok:false,error:String(err),stack:err.stack})}
         }`;
@@ -132,7 +155,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
         const timer=setTimeout(()=>{worker.terminate();reject(Error('Pyodide/TF.js smoke test timed out'));},150000);
         worker.onmessage=e=>{clearTimeout(timer);worker.terminate();URL.revokeObjectURL(blob);resolve(e.data)};
         worker.onerror=e=>{clearTimeout(timer);worker.terminate();reject(Error(e.message||'Worker error'))};
-        worker.postMessage({pyodide:`http://127.0.0.1:${port}/pyodide/pyodide.mjs`,pyodideBase:`http://127.0.0.1:${port}/pyodide/`,bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,compat:`http://127.0.0.1:${port}/vendor/tfjs_compat.py`,losses:`http://127.0.0.1:${port}/vendor/course-losses.js`,tfjs:src});
+        worker.postMessage({pyodide:`http://127.0.0.1:${port}/pyodide/pyodide.mjs`,pyodideBase:`http://127.0.0.1:${port}/pyodide/`,bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,compat:`http://127.0.0.1:${port}/vendor/tfjs_compat.py`,tensor:`http://127.0.0.1:${port}/vendor/tfjs_tensor.py`,losses:`http://127.0.0.1:${port}/vendor/course-losses.js`,tfjs:src});
       });
     },port);
     console.log('Browser scientific/TensorFlow.js backend test:', JSON.stringify(outcome));
