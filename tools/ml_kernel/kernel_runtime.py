@@ -10,6 +10,27 @@ import re
 import sys
 
 _TF_MODEL_NAMES: set[str] = set()
+_COURSE_DEPENDENCIES_READY = False
+
+
+async def initialize_course_dependencies():
+    """Load the course's Python UI packages once per kernel, not per cell.
+
+    Large compiled scientific packages are preloaded by Pyodide load options.
+    ipympl and ipywidgets are pure-Python wheels loaded from JupyterLite's
+    package index.  The Notebook source is left untouched.
+    """
+    global _COURSE_DEPENDENCIES_READY
+    if _COURSE_DEPENDENCIES_READY:
+        return
+    import piplite
+    from .imports_bootstrap import _register_ipympl_backends
+
+    await piplite.install(["ipywidgets", "ipympl", "seaborn"])
+    _register_ipympl_backends()
+    _COURSE_DEPENDENCIES_READY = True
+
+
 
 
 def _is_tf_constructor(node: ast.AST) -> bool:
@@ -81,6 +102,7 @@ def transform_tf_fit(code: str) -> str:
 async def prepare_cell(code: str) -> str:
     if not isinstance(code, str):
         return code
+    await initialize_course_dependencies()
     # Resolve hidden imports such as lab_utils_uni -> ipywidgets before
     # executing the original unchanged course cell.
     from .imports_bootstrap import install_missing
