@@ -17,7 +17,7 @@ from urllib.parse import quote
 
 _IMAGE = re.compile(
     r'(?P<start>\]\(\s*|\bsrc\s*=\s*["\'])'
-    r'(?P<target>(?:\./)?(?:images|data)/[^)\s"\']+)'
+    r'(?P<target>(?:\./)?(?:images|data)/[^)"\']+)'
 )
 
 
@@ -43,12 +43,17 @@ def stage(source: Path, destination: Path, base: str) -> tuple[int, int]:
 
             def resolve(match):
                 nonlocal images
-                asset = notebook.parent / match.group("target")
+                # HTML image names can contain spaces (for example figure 1.png).
+                # Preserve whitespace before an optional Markdown image title.
+                target = match.group("target").rstrip()
+                asset = notebook.parent / target
                 if not asset.is_file():
                     return match.group(0)
                 rel = asset.relative_to(destination)
                 images += 1
-                return match.group("start") + base + "/files/" + quote(rel.as_posix(), safe="/")
+                return (match.group("start") + base + "/files/"
+                        + quote(rel.as_posix(), safe="/")
+                        + match.group("target")[len(target):])
 
             converted = _IMAGE.sub(resolve, original)
             if converted != original:

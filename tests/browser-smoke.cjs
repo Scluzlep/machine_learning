@@ -20,8 +20,8 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
             const {loadPyodide} = await import(data.pyodide);
             const py = await loadPyodide({indexURL:data.pyodideBase});
             await py.loadPackage(['numpy','pandas','scipy','matplotlib','scikit-learn','micropip']);
-            await py.runPythonAsync("import micropip; await micropip.install(['ipywidgets', 'ipympl']); import ipywidgets, ipympl; slider = ipywidgets.IntSlider(value=4); assert slider.value == 4");
-            await py.loadPackage(['h5py', 'pillow']);
+            await py.runPythonAsync("import micropip; await micropip.install(['ipywidgets==7.6.5', 'ipympl==0.9.3']); import ipywidgets, ipympl; slider = ipywidgets.IntSlider(value=4); assert slider.value == 4");
+            await py.loadPackage(['h5py', 'Pillow']);
             await py.runPythonAsync(
                 "import h5py\\n"
               + "from PIL import Image\\n"

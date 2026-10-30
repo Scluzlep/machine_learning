@@ -53,6 +53,7 @@ jobs:
           python tests/test-notebook-integrity.py
           python tests/test-kernel-transform.py
           python tests/test-imports-bootstrap.py
+          python tests/test-legacy-versions.py
           python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
           python tests/test-notebook-integrity.py --staged .ml-contents
           python - <<'PY'
@@ -105,6 +106,8 @@ jobs:
       - name: Verify notebook syntax and static resources
         run: |
           python -m compileall -q machine_learning/browser_ml
+          python -m compileall -q tools/ml_kernel
+          python tests/test-legacy-versions.py --dist dist
           python - <<'PY'
           import json, pathlib
           files=list(pathlib.Path('machine_learning').rglob('*.ipynb'))

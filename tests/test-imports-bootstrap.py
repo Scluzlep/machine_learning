@@ -26,3 +26,11 @@ assert module.discover("get_ipython().run_line_magic('matplotlib', 'inline')", l
 assert module.discover("from lab_utils_uni import plt_house_x", lesson) >= {"ipywidgets"}
 print("Indirect lab_utils_uni -> ipywidgets dependency: PASS")
 print("Matplotlib widget -> ipympl and ipywidgets dependency: PASS")
+
+# h5py is an official compiled Pyodide wheel. Detect direct imports and
+# indirect imports inside the course's local helper scripts.
+assert module.discover("import h5py", lesson) == {"h5py"}
+lesson7 = root / "machine_learning/7. Neural Network In Practice 2/Initialization and Regularization"
+assert "h5py" in module.discover("from init_utils import sigmoid", lesson7)
+assert "h5py" in module.discover("from reg_utils import relu", lesson7)
+print("Direct/indirect h5py dependency detection: PASS")
