@@ -26,8 +26,13 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
     await first.waitFor({timeout: 60000});
     // CodeMirror virtualizes editor DOM; .cm-content may be empty until focus.
     // The notebook document still contains the actual original course cell.
-    const notebookText = await page.locator('.jp-NotebookPanel').innerText();
-    assert.match(notebookText, /from lab_utils_uni import/);
+    // JupyterLite lazily renders notebook cell editors. The exact original
+    // cell is checked in tests/test-imports-bootstrap.py; don't require a
+    // CodeMirror text node before it becomes visible.
+    await page.waitForFunction(() => {
+      const toolbar = document.querySelector('.jp-NotebookPanel .jp-Toolbar');
+      return /Python|Pyodide/i.test(toolbar?.textContent || '');
+    }, null, {timeout:60000});
     console.log('Running the original gradient-descent import cell, without editing it');
     await first.click();
     await page.keyboard.press('Control+Enter');
