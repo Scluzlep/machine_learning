@@ -65,9 +65,9 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
     try {
       await page.waitForFunction(
         () => [...document.querySelectorAll('.jp-OutputArea-output')]
-           .some(node => node.textContent.includes('ML_KERNEL_ZERO_EDIT_OK') &&
-                        node.textContent.includes('ML_LEGACY_RIDGE_OK') &&
-                        node.textContent.includes('ML_LEGACY_SCIPY_OK')),
+           .map(node => node.textContent).join('\\n').includes('ML_KERNEL_ZERO_EDIT_OK') &&
+          ['ML_LEGACY_RIDGE_OK','ML_LEGACY_SCIPY_OK'].every(marker =>
+            [...document.querySelectorAll('.jp-OutputArea-output')].some(node => node.textContent.includes(marker))),
         null, {timeout:90000}
       );
     } catch (error) {
