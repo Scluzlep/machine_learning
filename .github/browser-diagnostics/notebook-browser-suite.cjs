@@ -53,21 +53,33 @@ function buildUrl(file) {
   return new URL('lab/tree/' + file.split('/').map(encodeURIComponent).join('/'),base).href;
 }
 async function collect(page,source,tracking,rel) {
-  // The UI virtualizes long notebooks. Ask JupyterLite's Contents API for
-  // the complete saved document, not document.querySelectorAll('.jp-CodeCell').
-  const endpoint=new URL('api/contents/'+rel.split('/').map(encodeURIComponent).join('/'),base).href;
+  // JupyterLite's /api/contents/<filename> route is NOT a public HTTP API
+  // on static GitHub Pages (404). Use JupyterLab File > Download instead:
+  // it exports the entire current in-memory Notebook, including virtualized
+  // cells, Python stdout, stderr, errors, plots and widget MIME data.
   let model;
   try {
     await page.keyboard.press('Control+s');
     await sleep(1000);
-    model=await page.evaluate(async url=>{
-      const response=await fetch(url,{cache:'no-store'});
-      if(!response.ok)throw Error('JupyterLite Contents API returned HTTP '+response.status);
-      const data=await response.json();
-      return data.content || data;
-    },endpoint);
+    const menus=page.locator('.lm-MenuBar-item');
+    const menuNames=await menus.allInnerTexts();
+    const fileIndex=menuNames.findIndex(x=>/^(?:File|文件)$/i.test(x.trim()));
+    if(fileIndex<0)throw Error('File menu not found: '+JSON.stringify(menuNames));
+    await menus.nth(fileIndex).click({timeout:12000});
+    const labels=page.locator('.lm-Menu-itemLabel');
+    const labelsText=await labels.allInnerTexts();
+    const downloadIndex=labelsText.findIndex(x=>/^(?:Download|下载)$/i.test(x.trim()));
+    if(downloadIndex<0)throw Error('Download command not found: '+JSON.stringify(labelsText));
+    const requested=page.waitForEvent('download',{timeout:20000});
+    await labels.nth(downloadIndex).click({timeout:12000});
+    const download=await requested;
+    const savePath=path.join(root,'executed-notebooks',key(rel)+'.ipynb');
+    fs.mkdirSync(path.dirname(savePath),{recursive:true});
+    await download.saveAs(savePath);
+    model=JSON.parse(fs.readFileSync(savePath,'utf8'));
+    log('INFO','Exported complete executed Notebook: '+rel);
   }catch(e) {
-    log('WARN','Contents API unavailable for '+rel+': '+errorText(e));
+    log('WARN','Notebook download unavailable for '+rel+': '+errorText(e));
   }
   if(model && Array.isArray(model.cells)) {
     const code=model.cells.filter(c=>c.cell_type==='code');
@@ -92,7 +104,7 @@ async function collect(page,source,tracking,rel) {
         status:hasError?'FAIL':executed?'PASS':'NOT_EXECUTED',
         executionCount:current?.execution_count??null,outputs,hasError};
     });
-    return {method:'JupyterLite Contents API (whole document)',cells,
+    return {method:'JupyterLab File Download (whole executed Notebook)',cells,
       sourceCodeCells:source.code.length,modelCodeCells:code.length,
       pass:cells.filter(c=>c.status==='PASS').length,
       fail:cells.filter(c=>c.status==='FAIL').length,
@@ -107,7 +119,7 @@ async function collect(page,source,tracking,rel) {
     cellIndex:c.cellIndex,codeIndex:i,source:c.source.slice(0,100000),
     status:'NOT_VERIFIED',outputs:[],executionCount:null
   }));
-  return {method:'Incomplete virtualized DOM fallback; NOT verified',
+  return {method:'Notebook export unavailable, virtualized DOM fallback; NOT verified',
     cells,visibleCodeCells:dom,sourceCodeCells:source.code.length,
     pass:0,fail:0,unexecuted:cells.length};
 }
@@ -184,7 +196,7 @@ async function recordNotebook(rel) {
   let context,page;
   const start=Date.now();
   try {
-    context=await browser.newContext({viewport:{width:1440,height:900}});
+    context=await browser.newContext({viewport:{width:1440,height:900},acceptDownloads:true});
     page=await context.newPage();
     page.on('console',m=>{
       const e={kind:'console',type:m.type(),text:m.text(),location:m.location()};
@@ -238,7 +250,7 @@ async function recordNotebook(rel) {
           record.progress.push({at:timestamp(),...snapshot});
           log('PROGRESS',rel+' '+compact);
         }
-        const idle=/空闲|Idle/i.test(snapshot.kernelStatus||'') && !/忙碌|Busy/i.test(snapshot.kernelStatus||'');
+        const idle=/空闲|Idle/i.test((snapshot.kernelStatus||'')+' '+(snapshot.kernelText||'')) && !/忙碌|Busy/i.test((snapshot.kernelStatus||'')+' '+(snapshot.kernelText||''));
         if(snapshot.seen.length>0 && !snapshot.active && idle) stable++;
         else stable=0;
         if(stable>=6){finished=true;break;}
