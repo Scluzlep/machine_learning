@@ -18,6 +18,10 @@ found = module.discover(cell, lesson)
 assert "ipywidgets" in found, (found, cell)
 assert module.discover("import numpy as np", lesson) == set()
 assert module.discover("%matplotlib widget\nimport matplotlib.pyplot as plt", lesson) == {"ipympl", "ipywidgets"}
+assert module.discover("get_ipython().run_line_magic('matplotlib', 'widget')", lesson) == {"ipympl", "ipywidgets"}
+assert module.discover("get_ipython().run_line_magic('matplotlib', 'ipympl')", lesson) == {"ipympl", "ipywidgets"}
+assert module.discover("get_ipython().run_line_magic('matplotlib', 'inline')", lesson) == set()
+
 assert module.discover("from lab_utils_uni import plt_house_x", lesson) >= {"ipywidgets"}
 print("Indirect lab_utils_uni -> ipywidgets dependency: PASS")
 print("Matplotlib widget -> ipympl and ipywidgets dependency: PASS")
