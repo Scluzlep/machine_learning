@@ -5,7 +5,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['.github/workflows/browser-diagnostics.yml']
+    paths:
+      - '.github/workflows/browser-diagnostics.yml'
+      - 'tests/notebook-browser-suite.cjs'
 
 permissions:
   contents: read
@@ -183,3 +185,54 @@ jobs:
           path: browser-report/
           if-no-files-found: warn
           retention-days: 14
+
+  notebook-suites:
+    name: Notebook suite / ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 48
+    strategy:
+      fail-fast: false
+      matrix:
+        suite:
+          - '1. Linear Regression'
+          - '2. Logistic regression'
+          - '3. ML In Practice'
+          - '4. Neural Network_part_1'
+          - '5. Neural Network_part_2'
+          - '6. Neural Network In Practice 1'
+          - '7. Neural Network In Practice 2'
+          - 'self-check'
+    env:
+      NOTEBOOK_SUITE: ${{ matrix.suite }}
+      NOTEBOOK_TIMEOUT_MS: '150000'
+      SITE_URL: https://scluzlep.github.io/machine_learning/
+      DEBUG: pw:api
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install browser runner
+        continue-on-error: true
+        run: |
+          npm install --prefix .browser-ci --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          .browser-ci/node_modules/.bin/playwright install chromium
+      - name: Run every Notebook and capture each cell (never gate)
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p notebook-report
+          set +e
+          timeout --signal=INT --kill-after=20s 44m node tests/notebook-browser-suite.cjs 2>&1 | tee notebook-report/runner.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            echo "FAIL: Notebook runner returned $status; this is diagnostic-only." | tee -a notebook-report/runner.log
+          fi
+          exit 0
+      - name: Upload per-Notebook diagnostics, including failures
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebooks-${{ strategy.job-index }}
+          path: notebook-report/
+          retention-days: 7
+          if-no-files-found: warn
