@@ -54,9 +54,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: jupyterlite-validation-site
-          path: |
-            dist
-            .ml-contents
+          path: dist
           retention-days: 1
 
   notebooks:
@@ -75,6 +73,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: jupyterlite-validation-site
+          path: dist
       - name: Install browser
         run: |
           npm install --prefix .browser-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
