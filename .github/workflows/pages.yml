@@ -7,6 +7,7 @@ on:
       - 'machine_learning/**'
       - 'site-requirements.txt'
       - 'jupyter_lite_config.json'
+      - 'overrides.json'
   workflow_dispatch:
 
 permissions:
