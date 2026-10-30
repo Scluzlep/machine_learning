@@ -28,7 +28,8 @@ const server = spawn('python', ['-m', 'http.server', String(port),
       'fig, ax = plt.subplots()',
       'ax.plot([1,2,3], [1,4,9])',
       'fig.canvas.mpl_connect("button_press_event", lambda event: None)',
-      'print("ML_WIDGET_BACKEND_OK", plt.get_backend())',
+      'assert fig.canvas.__class__.__module__.startswith("ipympl.")',
+      'print("ML_WIDGET_BACKEND_OK", plt.get_backend(), fig.canvas.__class__.__module__)',
       'plt.show()'
     ].join('\n');
     const url = `http://127.0.0.1:${port}/machine_learning/repl/index.html?kernel=python&code=${encodeURIComponent(python)}`;
