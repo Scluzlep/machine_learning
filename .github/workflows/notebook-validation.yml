@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: notebook-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -57,8 +61,38 @@ jobs:
           path: dist
           retention-days: 1
 
-  notebooks:
+  smoke:
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: jupyterlite-validation-site
+          path: dist
+      - name: Install browser
+        run: |
+          npm install --prefix .browser-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          .browser-test/node_modules/.bin/playwright install chromium
+      - name: Execute one original notebook before sharding the collection
+        env:
+          NOTEBOOK_FILTER: 1. Linear Regression/1.demo.ipynb
+          NOTEBOOK_TIMEOUT_MS: 240000
+        run: node tests/notebook-full.cjs
+      - name: Save smoke result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-validation-smoke
+          path: notebook-validation/
+          if-no-files-found: warn
+
+  notebooks:
+    needs: [build, smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 360
     strategy:
