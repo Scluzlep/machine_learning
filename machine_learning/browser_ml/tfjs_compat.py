@@ -1,17 +1,14 @@
-"""Small TensorFlow/Keras compatibility module for the original course notebooks.
+"""Course-oriented TensorFlow / tf.keras API compatibility in Pyodide.
 
-The course's original code and plotting helpers may retain tensorflow imports.
-Use in a Pyodide Notebook, before importing any original TensorFlow helpers:
-
-    from browser_ml.tfjs_compat import install
-    tf = await install()  # choose GPU when the Worker supports WebGPU
-
-Existing model.fit calls must use `await model.fit(...)` (TF.js is asynchronous).
+The custom Pyodide kernel installs this module automatically on the first
+`import tensorflow`; course notebooks keep their original Python syntax.
+Unsupported operations fail explicitly rather than returning wrong math.
 """
+from __future__ import annotations
+
 import sys
 import types
 import numpy as np
-from pyodide.ffi import to_js
 from js import globalThis
 from . import tfjs_bridge as bridge
 
@@ -26,16 +23,22 @@ class _Tensor:
     def __array__(self, dtype=None):
         return np.asarray(self.value, dtype=dtype)
 
+    def __repr__(self):
+        return repr(self.value)
+
+    def __getitem__(self, item):
+        return self.value[item]
+
 
 def _sigmoid(x):
-    x = np.asarray(x, dtype=np.float64)
-    return _Tensor(1 / (1 + np.exp(-np.clip(x, -100, 100))))
+    v = np.asarray(x, dtype=np.float64)
+    return _Tensor(1 / (1 + np.exp(-np.clip(v, -100, 100))))
 
 
-def _softmax(x):
-    x = np.asarray(x, dtype=np.float64)
-    ex = np.exp(x - np.max(x, axis=-1, keepdims=True))
-    return _Tensor(ex / np.sum(ex, axis=-1, keepdims=True))
+def _softmax(x, axis=-1):
+    v = np.asarray(x, dtype=np.float64)
+    z = np.exp(v - np.max(v, axis=axis, keepdims=True))
+    return _Tensor(z / np.sum(z, axis=axis, keepdims=True))
 
 
 class Input:
@@ -46,19 +49,29 @@ class Input:
 class Normalization:
     def __init__(self, axis=-1, **kwargs):
         if axis != -1:
-            raise NotImplementedError("Only axis=-1 normalization is supported")
+            raise NotImplementedError("Normalization currently supports axis=-1")
         self.mean = None
         self.std = None
 
     def adapt(self, data):
         data = np.asarray(data, dtype=np.float32)
-        self.mean = np.mean(data, axis=0)
-        self.std = np.sqrt(np.var(data, axis=0) + 1e-7)
+        self.mean = data.mean(axis=0)
+        self.std = np.sqrt(data.var(axis=0) + 1e-7)
 
     def __call__(self, data):
         if self.mean is None:
-            raise ValueError("Call adapt(data) before normalization")
+            raise ValueError("Call adapt() before using Normalization")
         return (np.asarray(data, dtype=np.float32) - self.mean) / self.std
+
+
+class LeakyReLU:
+    """Import-compatible activation; model-layer support is not yet enabled."""
+    def __init__(self, negative_slope=0.3, alpha=None, **kwargs):
+        self.alpha = float(negative_slope if alpha is None else alpha)
+
+    def __call__(self, x):
+        x = np.asarray(x)
+        return np.maximum(x, self.alpha * x)
 
 
 class Adam:
@@ -67,8 +80,11 @@ class Adam:
 
 
 class _Loss:
-    def __init__(self, *args, **kwargs):
-        pass
+    tfjs_name = None
+    def __init__(self, from_logits=False, **kwargs):
+        if kwargs:
+            raise TypeError("Unsupported loss options: " + ", ".join(kwargs))
+        self.from_logits = bool(from_logits)
 
 
 class BinaryCrossentropy(_Loss):
@@ -83,85 +99,136 @@ class SparseCategoricalCrossentropy(_Loss):
     tfjs_name = "sparseCategoricalCrossentropy"
 
 
-class _Layer:
-    def __init__(self, js_layer):
-        self._layer = js_layer
+class CategoricalCrossentropy(_Loss):
+    tfjs_name = "categoricalCrossentropy"
 
-    def get_weights(self):
-        tensors = self._layer.getWeights()
-        return [np.asarray(t.arraySync().to_py(), dtype=np.float32) for t in tensors]
 
-    def set_weights(self, values):
-        tf = bridge._require_tf()
-        tensors = [tf.tensor(to_js(np.asarray(v, dtype=np.float32).tolist())) for v in values]
-        try:
-            self._layer.setWeights(globalThis.Array.of(*tensors))
-        finally:
-            for tensor in tensors:
-                tensor.dispose()
+class History:
+    """Keras History object, exposing history.history['loss']."""
+    def __init__(self, data):
+        self.history = data
+
+    def __repr__(self):
+        return f"History({self.history!r})"
 
 
 class Sequential:
-    def __init__(self, layers, name="model"):
+    def __init__(self, layers=None, name="model"):
         layer_defs = []
         input_shape = None
-        for layer in layers:
+        for layer in layers or []:
             if isinstance(layer, Input):
                 input_shape = layer.shape
             elif isinstance(layer, bridge.Dense):
                 if not layer_defs and input_shape is not None and layer.input_shape is None:
-                    layer = bridge.Dense(layer.units, layer.activation, input_shape, layer.name)
+                    layer.input_shape = input_shape
                 layer_defs.append(layer)
             else:
-                raise TypeError("This compatibility module currently supports Input and Dense")
+                raise TypeError(
+                    f"Unsupported layer {type(layer).__name__}; "
+                    "this adapter currently trains Dense networks"
+                )
         self._model = bridge.Sequential(layer_defs, name=name)
+
+    @property
+    def layers(self):
+        return self._model.layers
+
+    def add(self, layer):
+        if not isinstance(layer, bridge.Dense):
+            raise TypeError("Only Dense layers can be added")
+        self._model.add(layer)
 
     def summary(self):
         self._model.summary()
 
-    def get_layer(self, name):
-        return _Layer(self._model._model.getLayer(name))
+    def get_layer(self, name=None, index=None):
+        layers = self.layers
+        if index is not None:
+            return layers[index]
+        for layer in layers:
+            if layer.name == name:
+                return layer
+        raise ValueError(f"No layer named {name!r}")
 
-    def compile(self, loss=None, optimizer=None, **kwargs):
+    def get_weights(self):
+        return self._model.get_weights()
+
+    def compile(self, loss=None, optimizer=None, metrics=None, **kwargs):
+        if kwargs:
+            raise TypeError("Unsupported compile arguments: " + ", ".join(kwargs))
         if loss is None:
             loss = MeanSquaredError()
         if optimizer is None:
             optimizer = Adam()
-        if isinstance(loss, _Loss):
-            loss = loss.tfjs_name
         if not isinstance(optimizer, Adam):
-            raise TypeError("Only Adam optimizer is supported")
-        self._model.compile(loss=loss, learning_rate=optimizer.learning_rate)
+            raise TypeError("Only Adam is currently supported")
+        if isinstance(loss, _Loss):
+            if loss.from_logits:
+                fn_name = {
+                    BinaryCrossentropy: "binaryCrossentropyFromLogits",
+                    SparseCategoricalCrossentropy: "sparseCategoricalCrossentropyFromLogits",
+                }.get(type(loss))
+                if not fn_name:
+                    raise NotImplementedError(
+                        f"{type(loss).__name__}(from_logits=True) is not supported yet"
+                    )
+                loss_value = getattr(globalThis.mlCourseLosses, fn_name)
+            else:
+                loss_value = loss.tfjs_name
+        elif isinstance(loss, str):
+            loss_value = loss
+        else:
+            raise TypeError("Unsupported loss: " + repr(loss))
+        self._model.compile(loss=loss_value,
+                            learning_rate=optimizer.learning_rate, metrics=metrics)
 
-    async def fit(self, X, y, epochs=10, batch_size=32, verbose=0, **kwargs):
-        return await self._model.fit(X, y, epochs=epochs, batch_size=batch_size, verbose=verbose)
+    async def fit(self, X, y, epochs=10, batch_size=32,
+                  verbose=0, shuffle=True, **kwargs):
+        if kwargs:
+            raise TypeError("Unsupported fit arguments: " + ", ".join(kwargs))
+        data = await self._model.fit(X, y, epochs=epochs,
+                                     batch_size=batch_size, verbose=verbose,
+                                     shuffle=shuffle)
+        return History(data)
 
     def predict(self, X, **kwargs):
-        return self._model.predict(X)
+        return self._model.predict(X, **kwargs)
+
+    def __call__(self, X, **kwargs):
+        return _Tensor(self.predict(X))
 
     def dispose(self):
         self._model.dispose()
 
 
 def _module(name, **values):
-    obj = types.ModuleType(name)
-    obj.__dict__.update(values)
-    sys.modules[name] = obj
-    return obj
+    module = types.ModuleType(name)
+    module.__dict__.update(values)
+    sys.modules[name] = module
+    return module
 
 
 async def install(backend="auto"):
-    """Register enough `tensorflow.keras` modules for original coffee course labs."""
+    """Expose the supported TensorFlow 2/Keras course API as Python modules."""
     await bridge.load_tfjs(backend=backend)
+    await bridge._load_script(bridge._asset_url("course-losses.js"))
     layers = _module("tensorflow.keras.layers",
-                     Dense=bridge.Dense, Input=Input, Normalization=Normalization)
-    activations = _module("tensorflow.keras.activations",
-                          sigmoid=_sigmoid, relu=lambda x: np.maximum(x, 0),
-                          linear=lambda x: x)
-    losses = _module("tensorflow.keras.losses",
-                     BinaryCrossentropy=BinaryCrossentropy,
-                     MeanSquaredError=MeanSquaredError,
-                     SparseCategoricalCrossentropy=SparseCategoricalCrossentropy)
+                     Dense=bridge.Dense, Input=Input, Normalization=Normalization,
+                     LeakyReLU=LeakyReLU)
+    activations = _module(
+        "tensorflow.keras.activations",
+        sigmoid=_sigmoid, relu=lambda x: _Tensor(np.maximum(x, 0)),
+        linear=lambda x: _Tensor(np.asarray(x)),
+        softmax=_softmax
+    )
+    losses = _module(
+        "tensorflow.keras.losses",
+        BinaryCrossentropy=BinaryCrossentropy,
+        MeanSquaredError=MeanSquaredError,
+        SparseCategoricalCrossentropy=SparseCategoricalCrossentropy,
+        CategoricalCrossentropy=CategoricalCrossentropy,
+    )
     optimizers = _module("tensorflow.keras.optimizers", Adam=Adam)
     models = _module("tensorflow.keras.models", Sequential=Sequential)
     keras = _module("tensorflow.keras", Sequential=Sequential, Input=Input,
