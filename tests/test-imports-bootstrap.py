@@ -18,6 +18,11 @@ found = module.discover(cell, lesson)
 assert "ipywidgets" in found, (found, cell)
 assert module.discover("import numpy as np", lesson) == set()
 assert module.discover("import h5py", lesson) == {"h5py"}
+assert module.discover("import tensorflow as tf", lesson) == {"tensorflow"}
+tf_lesson = root / "machine_learning/4. Neural Network_part_1"
+assert "tensorflow" in module.discover("from lab_coffee_utils import load_coffee_data", tf_lesson)
+tf_lesson_2 = root / "machine_learning/5. Neural Network_part_2"
+assert "tensorflow" in module.discover("from autils import load_data", tf_lesson_2)
 assert module.discover("%matplotlib widget\nimport matplotlib.pyplot as plt", lesson) == {"ipympl", "ipywidgets"}
 assert module.discover("get_ipython().run_line_magic('matplotlib', 'widget')", lesson) == {"ipympl", "ipywidgets"}
 assert module.discover("get_ipython().run_line_magic('matplotlib', 'ipympl')", lesson) == {"ipympl", "ipywidgets"}

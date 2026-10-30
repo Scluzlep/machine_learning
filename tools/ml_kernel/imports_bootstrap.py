@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Other packages, such as numpy/scipy/matplotlib, are handled by Pyodide's
 # native package loader when imported directly in a cell.
-_MANAGED = frozenset({"ipywidgets", "ipympl", "seaborn", "h5py"})
+_MANAGED = frozenset({"ipywidgets", "ipympl", "seaborn", "h5py", "tensorflow"})
 _MAX_MODULES = 48
 _MAX_BYTES = 1_000_000
 
@@ -137,6 +137,9 @@ def _installed(name: str) -> bool:
 
 async def install_missing(code: str):
     targets = discover(code)
+    # TensorFlow itself has no WASM wheel; prepare_cell installs the TF.js
+    # Python adapter before this hook. Never ask pip to install native TF.
+    targets.discard("tensorflow")
     missing = sorted(p for p in targets if not _installed(p))
     if "h5py" in missing:
         from pyodide_js import loadPackage

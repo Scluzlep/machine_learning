@@ -120,16 +120,19 @@ async def prepare_cell(code: str) -> str:
     await initialize_course_dependencies()
     # Resolve hidden imports such as lab_utils_uni -> ipywidgets before
     # executing the original unchanged course cell.
-    from .imports_bootstrap import install_missing
-    await install_missing(code)
-    if (re.search(r"(?:^|\n)\s*(?:import tensorflow|from tensorflow\b)", code)
-            and "tensorflow" not in sys.modules):
+    from .imports_bootstrap import discover, install_missing
+    # Imports in lab_coffee_utils.py, autils.py and other local modules can
+    # import TensorFlow without the notebook cell mentioning it directly.
+    # Discover recursively *before* importing those modules into Python.
+    dependencies = discover(code)
+    if "tensorflow" in dependencies and "tensorflow" not in sys.modules:
         # The kernel's regular dependency loader runs after this hook.
         # NumPy is needed immediately by the TensorFlow.js bridge.
         from pyodide_js import loadPackagesFromImports
         await loadPackagesFromImports("import numpy")
         from .auto_tfjs.tfjs_compat import install
         await install()
+    await install_missing(code)
     # Repair only the removed sklearn APIs used by historical course cells.
     # Load native Pyodide wheels before importing the relevant modules.
     if re.search(r"\bload_boston\b", code):
