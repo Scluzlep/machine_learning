@@ -77,7 +77,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
               + "assert abs(float(sigmoid(0).numpy())-0.5)<1e-5\\n"
               + "model2 = Sequential([tf.keras.Input(shape=(2,)), Dense(3,'relu',name='layer1'), Dense(1,'sigmoid',name='layer2')])\\n"
               + "weights = model2.get_layer('layer1').get_weights()\\n"
-              + "assert len(weights)==2 and weights[0].shape==(2,3), f"Dense weights unexpected: {len(weights)}, {[w.shape for w in weights]}"\\n"
+              + "assert len(weights)==2 and weights[0].shape==(2,3), f'Dense weights unexpected: {len(weights)}, {[w.shape for w in weights]}'\\n"
               + "model2.get_layer('layer1').set_weights(weights)\\n"
               + "model2.compile(loss=tf.keras.losses.BinaryCrossentropy(),optimizer=tf.keras.optimizers.Adam(learning_rate=0.01))\\n"
               + "hist2 = await model2.fit([[0,0],[0,1],[1,0],[1,1]],[[0],[1],[1],[1]],epochs=2)\\n"
