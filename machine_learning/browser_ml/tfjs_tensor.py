@@ -7,6 +7,8 @@ carefully scoped subset of TensorFlow 2 eager mode, NOT full TensorFlow.
 from __future__ import annotations
 
 import numpy as np
+import builtins
+from js import globalThis
 from pyodide.ffi import to_js, create_proxy
 from . import tfjs_bridge as bridge
 
@@ -21,7 +23,7 @@ def _tf():
 
 def _dtype(value, dtype=None):
     if dtype is not None:
-        name = str(dtype)
+        name = np.dtype(dtype).name
         if name not in (float32, int32, bool):
             raise NotImplementedError(
                 f"TensorFlow.js tensors support float32, int32, bool; got {name}"
@@ -93,11 +95,15 @@ class Tensor:
         return int(self._js.size)
 
     def numpy(self):
-        return np.asarray(self._js.arraySync().to_py(), dtype=self.dtype).reshape(self.shape)
+        result = self._js.arraySync()
+        return np.asarray(result.to_py() if hasattr(result, "to_py") else result,
+                          dtype=self.dtype).reshape(self.shape)
 
     async def numpy_async(self):
         """Non-blocking WebGPU readback; preferred for large result tensors."""
-        return np.asarray((await self._js.array()).to_py(), dtype=self.dtype).reshape(self.shape)
+        result = await self._js.array()
+        return np.asarray(result.to_py() if hasattr(result, "to_py") else result,
+                          dtype=self.dtype).reshape(self.shape)
 
     def __array__(self, dtype=None, copy=None):
         data = self.numpy()
@@ -178,9 +184,9 @@ class Tensor:
 class Variable(Tensor):
     def __init__(self, initial_value, trainable=True, dtype=None, name=None):
         source = convert_to_tensor(initial_value, dtype=dtype)
-        js = _tf().variable(source._js, bool(trainable), name)
+        js = _tf().variable(source._js, builtins.bool(trainable), name)
         super().__init__(js)
-        self.trainable = bool(trainable)
+        self.trainable = builtins.bool(trainable)
         self.name = str(js.name)
 
     def assign(self, value):
@@ -234,7 +240,7 @@ def tanh(x): return _unary("tanh", x)
 
 def matmul(a, b, transpose_a=False, transpose_b=False):
     a, b = convert_to_tensor(a), convert_to_tensor(b)
-    return Tensor(_tf().matMul(a._js, b._js, bool(transpose_a), bool(transpose_b)))
+    return Tensor(_tf().matMul(a._js, b._js, builtins.bool(transpose_a), builtins.bool(transpose_b)))
 
 
 def reshape(tensor, shape, name=None):
@@ -280,22 +286,22 @@ def _axes(axis):
 
 def reduce_sum(input_tensor, axis=None, keepdims=False, name=None):
     x = convert_to_tensor(input_tensor)
-    return Tensor(_tf().sum(x._js, _axes(axis), bool(keepdims)))
+    return Tensor(_tf().sum(x._js, _axes(axis), builtins.bool(keepdims)))
 
 
 def reduce_mean(input_tensor, axis=None, keepdims=False, name=None):
     x = convert_to_tensor(input_tensor)
-    return Tensor(_tf().mean(x._js, _axes(axis), bool(keepdims)))
+    return Tensor(_tf().mean(x._js, _axes(axis), builtins.bool(keepdims)))
 
 
 def reduce_max(input_tensor, axis=None, keepdims=False, name=None):
     x = convert_to_tensor(input_tensor)
-    return Tensor(_tf().max(x._js, _axes(axis), bool(keepdims)))
+    return Tensor(_tf().max(x._js, _axes(axis), builtins.bool(keepdims)))
 
 
 def reduce_min(input_tensor, axis=None, keepdims=False, name=None):
     x = convert_to_tensor(input_tensor)
-    return Tensor(_tf().min(x._js, _axes(axis), bool(keepdims)))
+    return Tensor(_tf().min(x._js, _axes(axis), builtins.bool(keepdims)))
 
 
 def softmax(logits, axis=-1, name=None):
@@ -336,17 +342,17 @@ def ones_like(input, dtype=None, name=None):
 def eye(num_rows, num_columns=None, batch_shape=None, dtype=float32, name=None):
     if batch_shape is not None:
         raise NotImplementedError("batched eye is not implemented")
-    return Tensor(_tf().eye(int(num_rows), int(num_columns or num_rows), dtype))
+    return Tensor(_tf().eye(int(num_rows), int(num_columns or num_rows), None, dtype))
 
 
 def concat(values, axis, name=None):
     js_values = [convert_to_tensor(v)._js for v in values]
-    return Tensor(_tf().concat(to_js(js_values), int(axis)))
+    return Tensor(_tf().concat(globalThis.Array.of(*js_values), int(axis)))
 
 
 def stack(values, axis=0, name=None):
     js_values = [convert_to_tensor(v)._js for v in values]
-    return Tensor(_tf().stack(to_js(js_values), int(axis)))
+    return Tensor(_tf().stack(globalThis.Array.of(*js_values), int(axis)))
 
 
 def clip_by_value(t, clip_value_min, clip_value_max, name=None):
