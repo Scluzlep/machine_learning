@@ -1,9 +1,15 @@
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
 const { chromium } = require(process.cwd() + '/.browser-test/node_modules/playwright');
 
 const port = 8766;
-const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', 'dist'], {stdio: 'ignore'});
+const root = path.join(process.cwd(), '.site-test-root');
+const mount = path.join(root, 'machine_learning');
+fs.mkdirSync(root, {recursive: true});
+if (!fs.existsSync(mount)) fs.symlinkSync(path.join(process.cwd(), 'dist'), mount, 'dir');
+const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '127.0.0.1', '--directory', root], {stdio: 'ignore'});
 
 (async () => {
   let browser;
@@ -24,7 +30,7 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
       'model.fit([[0,0],[1,0],[0,1],[1,1]], [[0],[1],[1],[1]], epochs=2)',
       'print("ML_KERNEL_ZERO_EDIT_OK")'
     ].join('\n');
-    const url = `http://127.0.0.1:${port}/repl/index.html?kernel=python&code=${encodeURIComponent(python)}`;
+    const url = `http://127.0.0.1:${port}/machine_learning/repl/index.html?kernel=python&code=${encodeURIComponent(python)}`;
     const response = await page.goto(url, {waitUntil:'domcontentloaded', timeout:60000});
     assert.equal(response.status(), 200, 'JupyterLite REPL must be available');
     await page.waitForFunction(() => [...document.querySelectorAll('.jp-OutputArea-output')].some(node => node.textContent.includes('ML_KERNEL_ZERO_EDIT_OK')), null, {timeout:120000});
