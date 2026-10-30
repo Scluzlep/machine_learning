@@ -17,8 +17,23 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
     browser = await chromium.launch({headless: true, args: ['--no-sandbox']});
     const page = await browser.newPage();
     const messages = [];
-    page.on('console', x => { if (x.type() === 'error') messages.push(x.text()); });
-    page.on('pageerror', error => messages.push(String(error)));
+    page.on('console', x => {
+      const message = `[${x.type()}] ${x.text()}`;
+      if (x.type() === 'error' || x.type() === 'warning') {
+        messages.push(message);
+        console.error('JupyterLite console:', message.slice(0, 1000));
+      }
+    });
+    page.on('pageerror', error => {
+      messages.push(String(error));
+      console.error('JupyterLite page exception:', String(error));
+    });
+    page.on('requestfailed', req => {
+      console.error('JupyterLite request failed:', req.url(), req.failure()?.errorText);
+    });
+    page.on('response', res => {
+      if (res.status() >= 400) console.error('JupyterLite HTTP', res.status(), res.url());
+    });
     // The notebook code remains conventional Python. The kernel handles
     // tensorflow imports and the asynchronous TF.js implementation.
     const python = [
@@ -33,7 +48,17 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
     const url = `http://127.0.0.1:${port}/machine_learning/repl/index.html?kernel=python&code=${encodeURIComponent(python)}`;
     const response = await page.goto(url, {waitUntil:'domcontentloaded', timeout:60000});
     assert.equal(response.status(), 200, 'JupyterLite REPL must be available');
-    await page.waitForFunction(() => [...document.querySelectorAll('.jp-OutputArea-output')].some(node => node.textContent.includes('ML_KERNEL_ZERO_EDIT_OK')), null, {timeout:120000});
+    try {
+      await page.waitForFunction(
+        () => [...document.querySelectorAll('.jp-OutputArea-output')]
+           .some(node => node.textContent.includes('ML_KERNEL_ZERO_EDIT_OK')),
+        null, {timeout:90000}
+      );
+    } catch (error) {
+      console.error('REPL body excerpt:', (await page.locator('body').innerText().catch(()=>'')).slice(-4000));
+      console.error('REPL console messages:', JSON.stringify(messages.slice(-40)));
+      throw error;
+    }
     console.log('Original Python TensorFlow syntax executed successfully in custom JupyterLite kernel');
   } finally {
     if (browser) await browser.close();
