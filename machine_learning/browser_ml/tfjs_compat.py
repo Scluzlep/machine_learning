@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import sys
 import types
+import warnings
 import numpy as np
 from js import globalThis
 from . import tfjs_bridge as bridge
@@ -20,8 +21,31 @@ class _Tensor:
     def numpy(self):
         return self.value
 
-    def __array__(self, dtype=None):
-        return np.asarray(self.value, dtype=dtype)
+    def __array__(self, dtype=None, copy=None):
+        if copy is None:
+            return np.asarray(self.value, dtype=dtype)
+        return np.array(self.value, dtype=dtype, copy=copy)
+
+    @property
+    def shape(self):
+        return self.value.shape
+
+    @property
+    def dtype(self):
+        return self.value.dtype
+
+    def item(self):
+        return self.value.item()
+
+    def __float__(self):
+        if self.value.size != 1:
+            raise TypeError("Only one-element tensors can be converted to float")
+        return float(self.value.item())
+
+    def __int__(self):
+        if self.value.size != 1:
+            raise TypeError("Only one-element tensors can be converted to int")
+        return int(self.value.item())
 
     def __repr__(self):
         return repr(self.value)
@@ -39,6 +63,80 @@ def _softmax(x, axis=-1):
     v = np.asarray(x, dtype=np.float64)
     z = np.exp(v - np.max(v, axis=axis, keepdims=True))
     return _Tensor(z / np.sum(z, axis=axis, keepdims=True))
+
+
+def _relu(x):
+    return _Tensor(np.maximum(np.asarray(x), 0))
+
+
+def _linear(x):
+    return _Tensor(np.asarray(x))
+
+
+_ACTIVATIONS = {
+    "relu": _relu, "linear": _linear, "sigmoid": _sigmoid, "softmax": _softmax
+}
+
+
+class _TensorShape:
+    def __init__(self, dimensions):
+        self._dimensions = list(dimensions)
+
+    def as_list(self):
+        return list(self._dimensions)
+
+
+class _SymbolicTensor:
+    def __init__(self, dimensions):
+        self.shape = _TensorShape(dimensions)
+
+
+class Dense(bridge.Dense):
+    """Keras metadata uses Python functions; JS layers use activation names."""
+
+    def __init__(self, units, activation="linear", **kwargs):
+        if callable(activation):
+            choices = [k for k, v in _ACTIVATIONS.items() if v is activation]
+            if not choices:
+                raise TypeError("Unsupported activation callable")
+            activation = choices[0]
+        if activation not in _ACTIVATIONS:
+            raise ValueError(f"Unsupported activation {activation!r}")
+        super().__init__(units, activation=activation, **kwargs)
+        self.activation = _ACTIVATIONS[activation]
+
+    @property
+    def output(self):
+        if not hasattr(self, "_output_shape"):
+            raise ValueError("Build model before inspecting layer.output")
+        return _SymbolicTensor(self._output_shape)
+
+
+class l2:
+    """Keras-compatible L2 regularization configuration."""
+    def __init__(self, l2=0.01):
+        self.l2 = float(l2)
+        if self.l2 < 0:
+            raise ValueError("L2 must be nonnegative")
+
+
+_floatx = "float32"
+
+
+def set_floatx(value):
+    global _floatx
+    if value not in ("float32", "float64"):
+        raise ValueError("Only float32/float64 accepted")
+    if value == "float64":
+        warnings.warn(
+            "Keras requested float64, but TensorFlow.js Dense kernels use float32",
+            RuntimeWarning, stacklevel=2,
+        )
+    _floatx = value
+
+
+def floatx():
+    return _floatx
 
 
 class Input:
@@ -76,7 +174,7 @@ class LeakyReLU:
 
 class Adam:
     def __init__(self, learning_rate=0.001, lr=None, **kwargs):
-        self.learning_rate = float(lr if lr is not None else learning_rate)
+        self.learning_rate = _Tensor(float(lr if lr is not None else learning_rate))
 
 
 class _Loss:
@@ -85,6 +183,9 @@ class _Loss:
         if kwargs:
             raise TypeError("Unsupported loss options: " + ", ".join(kwargs))
         self.from_logits = bool(from_logits)
+
+    def get_config(self):
+        return {"from_logits": self.from_logits}
 
 
 class BinaryCrossentropy(_Loss):
@@ -130,6 +231,8 @@ class Sequential:
                 )
         self._model = bridge.Sequential(layer_defs, name=name)
         self._sparse_target_classes = None
+        self.loss = None
+        self.optimizer = None
 
     @property
     def layers(self):
@@ -142,6 +245,18 @@ class Sequential:
 
     def summary(self):
         self._model.summary()
+
+    def build(self, input_shape):
+        if input_shape is None or len(input_shape) < 2 or input_shape[-1] is None:
+            raise ValueError("Expected input shape (None, n_features)")
+        self._model._build(int(input_shape[-1]))
+
+    @property
+    def input(self):
+        width = self._model._built_n_features
+        if width is None:
+            raise ValueError("Build model before inspecting model.input")
+        return _SymbolicTensor((None, width))
 
     def get_layer(self, name=None, index=None):
         layers = self.layers
@@ -165,6 +280,8 @@ class Sequential:
         if not isinstance(optimizer, Adam):
             raise TypeError("Only Adam is currently supported")
         self._sparse_target_classes = None
+        self.loss = loss
+        self.optimizer = optimizer
         if isinstance(loss, _Loss):
             if isinstance(loss, SparseCategoricalCrossentropy):
                 if not self.layers:
@@ -190,7 +307,7 @@ class Sequential:
         else:
             raise TypeError("Unsupported loss: " + repr(loss))
         self._model.compile(loss=loss_value,
-                            learning_rate=optimizer.learning_rate, metrics=metrics)
+                            learning_rate=float(optimizer.learning_rate), metrics=metrics)
 
     async def fit(self, X, y, epochs=10, batch_size=32,
                   verbose=0, shuffle=True, **kwargs):
@@ -217,6 +334,12 @@ class Sequential:
     def predict(self, X, **kwargs):
         return self._model.predict(X, **kwargs)
 
+    async def predict_async(self, X):
+        return await self._model.predict_async(X)
+
+    async def get_weights_async(self):
+        return await self._model.get_weights_async()
+
     def __call__(self, X, **kwargs):
         return _Tensor(self.predict(X))
 
@@ -237,12 +360,12 @@ async def install(backend="auto"):
     if getattr(globalThis, "mlCourseLosses", None) is None:
         await bridge._load_script(bridge._asset_url("course-losses.js"))
     layers = _module("tensorflow.keras.layers",
-                     Dense=bridge.Dense, Input=Input, Normalization=Normalization,
+                     Dense=Dense, Input=Input, Normalization=Normalization,
                      LeakyReLU=LeakyReLU)
     activations = _module(
         "tensorflow.keras.activations",
-        sigmoid=_sigmoid, relu=lambda x: _Tensor(np.maximum(x, 0)),
-        linear=lambda x: _Tensor(np.asarray(x)),
+        sigmoid=_sigmoid, relu=_relu,
+        linear=_linear,
         softmax=_softmax
     )
     losses = _module(
@@ -253,10 +376,13 @@ async def install(backend="auto"):
         CategoricalCrossentropy=CategoricalCrossentropy,
     )
     optimizers = _module("tensorflow.keras.optimizers", Adam=Adam)
+    regularizers = _module("tensorflow.keras.regularizers", l2=l2)
+    keras_backend = _module("tensorflow.keras.backend", set_floatx=set_floatx, floatx=floatx)
     models = _module("tensorflow.keras.models", Sequential=Sequential)
     keras = _module("tensorflow.keras", Sequential=Sequential, Input=Input,
                     layers=layers, activations=activations, losses=losses,
-                    optimizers=optimizers, models=models, __version__="tfjs-compat")
+                    optimizers=optimizers, regularizers=regularizers, backend=keras_backend,
+                     models=models, __version__="tfjs-compat")
     tf = _module("tensorflow", keras=keras,
                  random=types.SimpleNamespace(set_seed=np.random.seed),
                  autograph=types.SimpleNamespace(set_verbosity=lambda *_: None),

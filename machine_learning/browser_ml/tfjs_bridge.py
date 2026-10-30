@@ -149,11 +149,13 @@ class Dense:
     """Keras-style dense layer with optional delayed input-shape inference."""
 
     def __init__(self, units, activation="linear", input_shape=None,
-                 name=None, input_dim=None, **kwargs):
+                 name=None, input_dim=None, kernel_regularizer=None, **kwargs):
         if kwargs:
             raise TypeError("Unsupported Dense arguments: " + ", ".join(kwargs))
         self.units = int(units)
         self.activation = activation
+        self._activation_name = activation
+        self.kernel_regularizer = kernel_regularizer
         self.input_shape = tuple(input_shape) if input_shape is not None else (
             (int(input_dim),) if input_dim is not None else None
         )
@@ -163,7 +165,12 @@ class Dense:
     def _js_layer(self, inferred_input=None):
         if self._layer is None:
             tf = _require_tf()
-            opts = {"units": self.units, "activation": self.activation}
+            opts = {"units": self.units, "activation": self._activation_name}
+            if self.kernel_regularizer is not None:
+                strength = getattr(self.kernel_regularizer, "l2", None)
+                if strength is None:
+                    raise TypeError("Only L2 kernel_regularizer is implemented")
+                opts["kernelRegularizer"] = tf.regularizers.l2(_config(l2=float(strength)))
             shape = self.input_shape or inferred_input
             if shape is not None:
                 opts["inputShape"] = list(shape)
@@ -243,8 +250,12 @@ class Sequential:
         if not self._layers:
             raise ValueError("Sequential model has no layers")
         self._model = self._tf.sequential(_config(name=self._name))
+        prev_units = n_features
         for i, layer in enumerate(self._layers):
             self._model.add(layer._js_layer((n_features,) if i == 0 else None))
+            layer._input_shape = (None, prev_units)
+            layer._output_shape = (None, layer.units)
+            prev_units = layer.units
         self._built_n_features = n_features
         if self._compile_options is not None:
             self._model.compile(self._compile_options)
@@ -298,6 +309,27 @@ class Sequential:
                 pred.dispose()
         finally:
             xjs.dispose()
+
+    async def predict_async(self, X):
+        data = np.asarray(X, dtype=np.float32)
+        if data.ndim != 2:
+            raise ValueError("model.predict expects a 2D feature matrix")
+        self._build(data.shape[1])
+        xjs = _tensor(data)
+        try:
+            pred = self._model.predict(xjs)
+            try:
+                return np.asarray((await pred.array()).to_py(), dtype=np.float32)
+            finally:
+                pred.dispose()
+        finally:
+            xjs.dispose()
+
+    async def get_weights_async(self):
+        if self._model is None:
+            raise ValueError("Model has not been built yet")
+        return [np.asarray((await tensor.array()).to_py(), dtype=np.float32)
+                for tensor in self._model.getWeights()]
 
     def get_weights(self):
         if self._model is None:
