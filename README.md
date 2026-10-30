@@ -34,7 +34,11 @@ python -m http.server 8000 --directory dist
 
 在文件浏览器中打开 **`浏览器环境自检.ipynb`**，可以依次检测 NumPy、SciPy、pandas、scikit-learn、Matplotlib、ipywidgets、ipympl 和 TensorFlow.js。
 
-神经网络章节新增 **`2a. CoffeeRoasting_TFJS.ipynb`**，在浏览器里训练咖啡烘焙分类模型，数据处理与画图继续使用 Python。TensorFlow.js 的 Python 桥接代码位于 `machine_learning/browser_ml/tfjs_bridge.py`。
+神经网络章节的原版 **`2. CoffeeRoasting_TF.ipynb`** 已接入 TensorFlow.js：保留 60 个原有教学单元格，只调整 3 个代码单元格；数据处理、画图和大部分 Keras 调用保持原样。
+
+运行时优先使用 **WebGPU**，其次尝试 WebGL，最后回退 CPU。可以在 Notebook 中运行 `from browser_ml.tfjs_bridge import backend_info; backend_info()` 查看当前后端及回退原因。兼容层位于 `machine_learning/browser_ml/tfjs_compat.py`，底层执行模块位于 `machine_learning/browser_ml/tfjs_bridge.py`。
+
+另附 **`2a. CoffeeRoasting_TFJS.ipynb`**，用于直接查看 TensorFlow.js 桥接接口的精简示例。
 
 训练时使用 `await model.fit(...)`，计算直接在浏览器内完成。仓库的 GitHub Actions 也会使用 Chromium 运行 Pyodide、科学计算包和 TensorFlow.js 的自动测试。
 
