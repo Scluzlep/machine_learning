@@ -131,11 +131,13 @@ def vendor(dist: Path, npm_package: Path, base_path: str) -> None:
     kernel = plugins.setdefault("@jupyterlite/pyodide-kernel-extension:kernel", {})
     kernel["pyodideUrl"] = f"{base_path.rstrip('/')}/pyodide/pyodide.mjs"
     options = kernel.setdefault("loadPyodideOptions", {})
-    options["packageBaseUrl"] = f"{base_path.rstrip('/')}/pyodide/"
+    # Pyodide computes an absolute packageBaseUrl from the local pyodide.mjs
+    # and lockFileURL. A path-only URL here is invalid inside its Worker.
+    options.pop("packageBaseUrl", None)
     options["packages"] = list(COURSE_PACKAGES)
     settings_file.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print("Pyodide runtime hosted on", kernel["pyodideUrl"])
-    print("Pyodide scientific package source:", options["packageBaseUrl"])
+    print("Pyodide scientific package source: local pyodide.mjs / lockfile base")
     print("Scientific modules initialized with kernel:", ", ".join(COURSE_PACKAGES))
     print("Local runtime size (MiB):",
           round(sum((dest / name).stat().st_size for name in CORE) / 1024**2, 1))
