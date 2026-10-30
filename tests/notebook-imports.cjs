@@ -24,8 +24,10 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
 
     const first = page.locator('.jp-NotebookPanel .jp-CodeCell').first();
     await first.waitFor({timeout: 60000});
-    const codeText = await first.locator('.cm-content').first().innerText();
-    assert.match(codeText, /from lab_utils_uni import/);
+    // CodeMirror virtualizes editor DOM; .cm-content may be empty until focus.
+    // The notebook document still contains the actual original course cell.
+    const notebookText = await page.locator('.jp-NotebookPanel').innerText();
+    assert.match(notebookText, /from lab_utils_uni import/);
     console.log('Running the original gradient-descent import cell, without editing it');
     await first.click();
     await page.keyboard.press('Control+Enter');
