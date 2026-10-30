@@ -88,20 +88,15 @@ async function collect(page,source,tracking) {
 }
 
 async function openNotebook(page,rel) {
-  const url=buildUrl(rel);
-  await page.goto(url,{waitUntil:'domcontentloaded',timeout:55000});
+  // GitHub Pages returns HTTP 404 for /lab/tree/* URLs.
+  // Open through the actual JupyterLite file browser instead.
+  await page.goto(new URL('lab/',base).href,{waitUntil:'domcontentloaded',timeout:55000});
   const panel=page.locator('.jp-NotebookPanel').first();
-  try { await panel.waitFor({timeout:45000}); }
-  catch (error) {
-    // Fallback to the JupyterLab file browser for builds not supporting lab/tree.
-    log('INFO','Direct notebook route not ready: ' + rel + ', trying file browser');
-    await page.goto(new URL('lab/',base).href,{waitUntil:'domcontentloaded',timeout:45000});
-    const segments=rel.split('/');
-    for(const segment of segments) {
-      await page.locator('.jp-DirListing-item').filter({hasText:segment}).first().dblclick({timeout:30000});
-    }
-    await panel.waitFor({timeout:55000});
+  const segments=rel.split('/');
+  for(const segment of segments) {
+    await page.locator('.jp-DirListing-item').filter({hasText:segment}).first().dblclick({timeout:35000});
   }
+  await panel.waitFor({timeout:55000});
   await page.waitForFunction(()=>{
     const toolbar=document.querySelector('.jp-NotebookPanel .jp-Toolbar');
     return !!toolbar && /Python|Pyodide/i.test(toolbar.textContent||'') && !/No Kernel/i.test(toolbar.textContent||'');
@@ -133,19 +128,20 @@ async function installTracker(page) {
   });
 }
 async function clickRunAll(page) {
-  await page.locator('#jp-mainmenu-run').click({timeout:15000});
+  // Do not rely on #jp-mainmenu-run: that ID is not present in Lite.
+  // The localized Lumino menubar is visible in the actual JupyterLab UI.
+  const bar=page.locator('.lm-MenuBar-item');
+  const entries=await bar.allInnerTexts();
+  const index=entries.findIndex(t=>/^(?:运行|Run)$/i.test(t.trim()));
+  if(index<0)throw Error('Run menubar entry missing: '+JSON.stringify(entries));
+  await bar.nth(index).click({timeout:15000});
   const labels=page.locator('.lm-Menu-itemLabel');
-  const count=await labels.count();
-  const expected=/^(?:Run All Cells|Run All|运行所有单元格|运行全部单元格|全部运行|运行所有)$/i;
-  for(let i=0;i<count;i++) {
-    const label=(await labels.nth(i).innerText().catch(()=>'')).trim();
-    if(expected.test(label)) {
-      await labels.nth(i).click({timeout:10000});
-      return label;
-    }
-  }
-  const menu=await labels.allInnerTexts();
-  throw Error('Run All Cells menu item missing; found: '+JSON.stringify(menu));
+  const names=await labels.allInnerTexts();
+  const wanted=/^(?:Run All Cells|Run All|运行所有单元格|运行全部单元格|全部运行|运行所有)$/i;
+  const found=names.findIndex(t=>wanted.test(t.trim()));
+  if(found<0)throw Error('Run all command missing: '+JSON.stringify(names));
+  await labels.nth(found).click({timeout:15000});
+  return names[found].trim();
 }
 async function recordNotebook(rel) {
   const source=fromNotebook(rel);
@@ -188,9 +184,8 @@ async function recordNotebook(rel) {
     await openNotebook(page,rel);
     record.opened=timestamp();
     const actual=await page.locator('.jp-NotebookPanel .jp-CodeCell').count();
-    if(actual!==source.code.length) {
-      record.errors.push('Code cell count mismatch: UI='+actual+', source='+source.code.length);
-    }
+    // JupyterLab virtualizes long notebooks; only mounted cells appear in DOM.
+    append(logs,{kind:'notebook-opened',mountedCodeCells:actual,sourceCodeCells:source.code.length});
     if(source.code.length===0) {
       record.status='PASS';
       record.reason='Markdown-only Notebook rendered';
