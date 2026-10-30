@@ -22,6 +22,18 @@ CORE = (
 PYODIDE_VERSION = "314.0.6"
 FALLBACK = f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
 
+# Fixed machine-learning course dependencies. Pyodide loads these as part of
+# kernel initialization rather than stalling individual Notebook cells.
+COURSE_PACKAGES = (
+    "numpy",
+    "scipy",
+    "pandas",
+    "matplotlib",
+    "scikit-learn",
+    "micropip",
+)
+
+
 
 def vendor(dist: Path, npm_package: Path, base_path: str) -> None:
     dest = dist / "pyodide"
@@ -40,9 +52,11 @@ def vendor(dist: Path, npm_package: Path, base_path: str) -> None:
     kernel["pyodideUrl"] = f"{base_path.rstrip('/')}/pyodide/pyodide.mjs"
     options = kernel.setdefault("loadPyodideOptions", {})
     options["packageBaseUrl"] = FALLBACK
+    options["packages"] = list(COURSE_PACKAGES)
     settings_file.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print("Pyodide runtime hosted on", kernel["pyodideUrl"])
     print("Remaining Pyodide scientific package source:", FALLBACK)
+    print("Scientific modules initialized with kernel:", ", ".join(COURSE_PACKAGES))
     print("Local runtime size (MiB):",
           round(sum((dest / name).stat().st_size for name in CORE) / 1024**2, 1))
 
