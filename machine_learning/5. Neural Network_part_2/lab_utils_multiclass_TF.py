@@ -41,7 +41,7 @@ def plot_cat_decision_boundary_mc(ax, X, predict , class_labels=None, legend=Fal
     else:
         Z = np.zeros((len(points),))
         for i in range(len(points)):
-            Z[i] = predict(points[i].reshape(1,2))
+            Z[i] = np.asarray(predict(points[i].reshape(1,2))).item()
     Z = Z.reshape(xx.shape)
 
     #contour plot highlights boundaries between values - classes in this case
@@ -116,7 +116,7 @@ def plt_prob_z(ax,fwb, x0_rng=(-8,8), x1_rng=(-5,4)):
     for i in range(tmp_x0.shape[0]):
         for j in range(tmp_x1.shape[1]):
             x = np.array([[tmp_x0[i,j],tmp_x1[i,j]]])
-            z[i,j] = fwb(x)
+            z[i,j] = np.asarray(fwb(x)).item()
             c[i,j] = 0. if z[i,j] == 0 else 1.
     with warnings.catch_warnings():  # suppress no contour warning
         warnings.simplefilter("ignore")
