@@ -237,4 +237,4 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-# Manual diagnostic trigger after the h5py/static asset fixes; no workflow behavior changed.
+# Re-run browser diagnostics against the deployed Pyodide h5py and static-asset fixes; no workflow behavior changed.
