@@ -212,7 +212,8 @@ def _module(name, **values):
 async def install(backend="auto"):
     """Expose the supported TensorFlow 2/Keras course API as Python modules."""
     await bridge.load_tfjs(backend=backend)
-    await bridge._load_script(bridge._asset_url("course-losses.js"))
+    if getattr(globalThis, "mlCourseLosses", None) is None:
+        await bridge._load_script(bridge._asset_url("course-losses.js"))
     layers = _module("tensorflow.keras.layers",
                      Dense=bridge.Dense, Input=Input, Normalization=Normalization,
                      LeakyReLU=LeakyReLU)
