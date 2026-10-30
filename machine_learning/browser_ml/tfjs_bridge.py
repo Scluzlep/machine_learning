@@ -260,7 +260,13 @@ class Sequential:
             layer._input_shape = previous_shape
             # TF.js layers expose symbolic output shapes through the model's
             # output tensor, not through the Python-Keras inputShape property.
-            output_shape = tuple(self._model.outputs[0].shape.to_py())
+            # Dense shape is statically known from its units; never infer it
+            # from the Sequential model output, which may refer to another
+            # symbolic layer when expanding a network.
+            if type(layer).__name__ == "Dense":
+                output_shape = (None, layer.units)
+            else:
+                output_shape = tuple(self._model.outputs[0].shape.to_py())
             layer._output_shape = output_shape
             previous_shape = output_shape
         self._built_input_shape = shape
