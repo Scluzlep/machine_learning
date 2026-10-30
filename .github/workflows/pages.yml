@@ -43,7 +43,7 @@ jobs:
           KERNEL_WHEEL="$(python - <<'PY'
           from pathlib import Path
           import sys
-          matches=list(Path(sys.prefix).rglob('pyodide_kernel-0.8.3-*.whl'))
+          matches=list(Path(sys.prefix).rglob('pyodide_kernel-0.8.6-*.whl'))
           if len(matches)!=1:
               raise SystemExit(f'Expected one JupyterLite kernel wheel, found {matches}')
           print(matches[0])
@@ -51,8 +51,17 @@ jobs:
           )"
           python tools/ml_kernel/build_custom_kernel.py "$KERNEL_WHEEL" --output .ml-wheel
           python tests/test-kernel-transform.py
+          python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          original = Path('machine_learning/1. Linear Regression/2.Model_Representation.ipynb')
+          deployed = Path('.ml-contents/1. Linear Regression/2.Model_Representation.ipynb')
+          assert json.loads(original.read_text())['metadata']['kernelspec']['name'] == 'python3'
+          assert json.loads(deployed.read_text())['metadata']['kernelspec']['name'] == 'python'
+          PY
       - name: Build static site
-        run: jupyter lite build --contents machine_learning --output-dir dist --piplite-wheels .ml-wheel/pyodide_kernel-0.8.3-py3-none-any.whl
+        run: jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel/pyodide_kernel-0.8.6-py3-none-any.whl
       - name: Bundle TensorFlow.js for browser and Pyodide workers
         run: |
           npm install --prefix .tfjs-vendor --no-save --ignore-scripts --no-audit --no-fund @tensorflow/tfjs@4.22.0 @tensorflow/tfjs-backend-webgpu@4.22.0
@@ -74,7 +83,7 @@ jobs:
           assert (output/'vendor/tf.min.js').stat().st_size > 100000
           assert (output/'vendor/tf-backend-webgpu.min.js').stat().st_size > 100000
           assert (output/'api/translations/zh_CN.json').exists()
-          assert any(output.rglob('pyodide_kernel-0.8.3-py3-none-any.whl')), 'Patched Pyodide kernel wheel not deployed'
+          assert any(output.rglob('pyodide_kernel-0.8.6-py3-none-any.whl')), 'Patched Pyodide kernel wheel not deployed'
           print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
           PY
       - name: Test scientific WASM packages and TensorFlow.js in Chromium
@@ -85,6 +94,7 @@ jobs:
           cp machine_learning/browser_ml/tfjs_compat.py dist/vendor/tfjs_compat.py
           node tests/browser-smoke.cjs
           node tests/repl-zero-edit.cjs
+          node tests/notebook-ui.cjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
