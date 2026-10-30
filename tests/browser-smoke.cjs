@@ -19,8 +19,11 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
           try {
             const {loadPyodide} = await import(data.pyodide);
             const py = await loadPyodide({indexURL:data.pyodideBase});
-            await py.loadPackage(['numpy','pandas','scipy','matplotlib','scikit-learn','micropip']);
-            await py.runPythonAsync("import micropip; await micropip.install('ipython==8.12.3'); await micropip.install(['ipywidgets==7.6.5', 'ipympl==0.9.3']); import ipywidgets, ipympl; slider = ipywidgets.IntSlider(value=4); assert slider.value == 4");
+            // Isolated backend probe: do not install Jupyter/ipywidgets here.
+            // An unconstrained browser-side PyPI resolver can pull new
+            // ipykernel/tornado wheels unsupported by old Pyodide. Real
+            // widget + pinned IPython are tested in JupyterLite REPL instead.
+            await py.loadPackage(['numpy','pandas','scipy','matplotlib','scikit-learn']);
             await py.loadPackage(['h5py', 'Pillow']);
             await py.runPythonAsync(
                 "import h5py\\n"

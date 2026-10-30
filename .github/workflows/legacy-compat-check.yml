@@ -91,7 +91,9 @@ jobs:
         run: |
           npm install --prefix .browser-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
           .browser-test/node_modules/.bin/playwright install chromium
-          node tests/browser-smoke.cjs
+          # Test the actual patched kernel bootstrap first. A direct
+          # Pyodide probe alone cannot exercise JupyterLite's Piplite index.
           node tests/repl-zero-edit.cjs
+          node tests/browser-smoke.cjs
           node tests/notebook-imports.cjs
           node tests/repl-widget.cjs
