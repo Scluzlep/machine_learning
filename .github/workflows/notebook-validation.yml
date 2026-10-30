@@ -1,0 +1,86 @@
+name: Validate all JupyterLite notebooks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: site-requirements.txt
+      - run: python -m pip install -r site-requirements.txt
+      - name: Build the same browser kernel and site as Pages
+        run: |
+          KERNEL_WHEEL="$(python - <<'PY'
+          from pathlib import Path
+          import sys
+          matches = list(Path(sys.prefix).rglob('pyodide_kernel-0.8.6-*.whl'))
+          if len(matches) != 1:
+              raise SystemExit(f'Expected one JupyterLite kernel wheel, found {matches}')
+          print(matches[0])
+          PY
+          )"
+          python tools/ml_kernel/build_custom_kernel.py "$KERNEL_WHEEL" --output .ml-wheel
+          python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
+          jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel/pyodide_kernel-0.8.6-py3-none-any.whl
+          npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@314.0.6
+          python tools/ml_kernel/vendor_pyodide.py --dist dist --base-path /machine_learning
+          npm install --prefix .tfjs-vendor --no-save --ignore-scripts --no-audit --no-fund @tensorflow/tfjs@4.22.0 @tensorflow/tfjs-backend-webgpu@4.22.0
+          mkdir -p dist/vendor
+          cp .tfjs-vendor/node_modules/@tensorflow/tfjs/dist/tf.min.js dist/vendor/tf.min.js
+          cp .tfjs-vendor/node_modules/@tensorflow/tfjs-backend-webgpu/dist/tf-backend-webgpu.min.js dist/vendor/tf-backend-webgpu.min.js
+          cp machine_learning/browser_ml/course-losses.js dist/vendor/course-losses.js
+          cp machine_learning/browser_ml/tfjs_bridge.py dist/vendor/tfjs_bridge.py
+          cp machine_learning/browser_ml/tfjs_compat.py dist/vendor/tfjs_compat.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jupyterlite-validation-site
+          path: |
+            dist
+            .ml-contents
+          retention-days: 1
+
+  notebooks:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: jupyterlite-validation-site
+      - name: Install browser
+        run: |
+          npm install --prefix .browser-test --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+          .browser-test/node_modules/.bin/playwright install chromium
+      - name: Execute every notebook in this shard
+        env:
+          NOTEBOOK_SHARD: ${{ matrix.shard }}
+          NOTEBOOK_SHARDS: 4
+          NOTEBOOK_TIMEOUT_MS: 900000
+        run: node tests/notebook-full.cjs
+      - name: Save cell-level results even when execution fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: notebook-validation-${{ matrix.shard }}
+          path: notebook-validation/
+          if-no-files-found: warn
+
