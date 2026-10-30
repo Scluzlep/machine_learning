@@ -43,7 +43,7 @@ jobs:
           KERNEL_WHEEL="$(python - <<'PY'
           from pathlib import Path
           import sys
-          matches=list(Path(sys.prefix).rglob('pyodide_kernel-0.8.6-*.whl'))
+          matches=list(Path(sys.prefix).rglob('pyodide_kernel-0.1.1-*.whl'))
           if len(matches)!=1:
               raise SystemExit(f'Expected one JupyterLite kernel wheel, found {matches}')
           print(matches[0])
@@ -74,7 +74,7 @@ jobs:
           wheel_dir = Path('.ml-wheel')
           packages = [f'ipympl=={version("ipympl")}',
                       f'ipywidgets=={version("ipywidgets")}',
-                      'seaborn==0.13.2']
+                      'seaborn==0.11.2']
           subprocess.run(
               [sys.executable, '-m', 'pip', 'download', '--no-deps',
                '--only-binary=:all:', '--dest', str(wheel_dir), *packages],
@@ -86,7 +86,7 @@ jobs:
         run: jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel
       - name: Self-host Pyodide WebAssembly and standard library
         run: |
-          npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@314.0.6
+          npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@0.23.4
           python tools/ml_kernel/vendor_pyodide.py --dist dist --base-path /machine_learning
       - name: Bundle Adobe Source Han Sans SC for Matplotlib
         run: |
@@ -114,20 +114,20 @@ jobs:
           assert (output/'lab/index.html').exists()
           assert (output/'vendor/tf.min.js').stat().st_size > 100000
           assert (output/'pyodide/pyodide.asm.wasm').stat().st_size > 5000000
-          lock=json.loads((output/'pyodide/pyodide-lock.json').read_text())['packages']
+          lock=json.loads((output/'pyodide/repodata.json').read_text())['packages']
           for extra in ('h5py', 'pillow'):
               filename=lock[extra]['file_name']
               assert '://' not in filename, f'{extra} must be self-hosted'
               assert (output/'pyodide'/filename).is_file(), f'Missing {extra} wheel'
           js = json.loads((output/'jupyter-lite.json').read_text())
           opts=js['jupyter-config-data']['litePluginSettings']['@jupyterlite/pyodide-kernel-extension:kernel']
-          assert opts['pyodideUrl']=='/machine_learning/pyodide/pyodide.mjs'
+          assert opts['pyodideUrl']=='/machine_learning/pyodide/pyodide.js'
           assert (output/'vendor/tf-backend-webgpu.min.js').stat().st_size > 100000
           assert (output/'vendor/course-losses.js').stat().st_size > 500
           assert (output/'assets/fonts/SourceHanSansSC-Regular.otf').stat().st_size == 16529832
           assert 'SIL OPEN FONT LICENSE' in (output/'assets/fonts/OFL-LICENSE.txt').read_text()
           assert (output/'api/translations/zh_CN.json').exists()
-          assert any(output.rglob('pyodide_kernel-0.8.6-py3-none-any.whl')), 'Patched Pyodide kernel wheel not deployed'
+          assert any(output.rglob('pyodide_kernel-0.1.1-py3-none-any.whl')), 'Patched Pyodide kernel wheel not deployed'
           assert any(output.rglob('ipympl-*.whl')), 'ipympl Python wheel is not bundled'
           assert any(output.rglob('ipywidgets-*.whl')), 'ipywidgets Python wheel is not bundled'
           assert any(output.rglob('seaborn-*.whl')), 'seaborn Python wheel is not bundled'
@@ -146,12 +146,16 @@ jobs:
           node tests/notebook-ui.cjs
           node tests/notebook-imports.cjs
           node tests/repl-widget.cjs
+      # Manual builds of compat must not overwrite the main Pages site.
       - name: Configure Pages
+        if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
       - name: Upload artifact
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v4
         with:
           path: dist
       - name: Deploy Pages
+        if: github.ref == 'refs/heads/main'
         id: deployment
         uses: actions/deploy-pages@v4
