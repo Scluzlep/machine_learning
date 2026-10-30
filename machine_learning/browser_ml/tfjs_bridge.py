@@ -22,6 +22,8 @@ except ImportError:
     to_js = None
 
 _tf = None
+_webgpu_loaded = False
+_backend_attempts = []
 
 
 def _config(**kwargs):
@@ -40,30 +42,92 @@ def _asset_url():
     return f"{loc.scheme}://{loc.netloc}{path}/vendor/tf.min.js"
 
 
-async def load_tfjs(url=None):
-    """Load the site's local TF.js bundle in the Pyodide worker."""
-    global _tf
-    if _tf is not None:
-        return _tf
-    if globalThis is None:
-        raise RuntimeError("This bridge needs the Pyodide browser kernel")
+
+async def _load_script(url):
+    """Load a locally hosted UMD bundle into a JupyterLite Pyodide worker."""
     try:
-        _tf = globalThis.tf
-    except AttributeError:
-        target = url or _asset_url()
+        globalThis.importScripts(url)
+    except Exception:
+        response = await globalThis.fetch(url)
+        if not response.ok:
+            raise RuntimeError(f"JavaScript asset failed: {url} (HTTP {response.status})")
+        globalThis.eval(await response.text())
+
+
+def _worker_has_webgpu():
+    try:
+        return getattr(getattr(globalThis, "navigator", None), "gpu", None) is not None
+    except Exception:
+        return False
+
+
+async def _activate_backend(name):
+    """Activate the backend and verify that it can run a GPU/CPU operation."""
+    tf = _require_tf()
+    result = await tf.setBackend(name)
+    if not result:
+        raise RuntimeError(f"Backend {name} could not be activated")
+    await tf.ready()
+    x = tf.tensor2d(to_js([[1.0, 2.0], [3.0, 4.0]]))
+    try:
+        y = x.matMul(x)
         try:
-            globalThis.importScripts(target)
-        except Exception:
-            response = await globalThis.fetch(target)
-            if not response.ok:
-                raise RuntimeError(f"TensorFlow.js download failed: {target} (HTTP {response.status})")
-            globalThis.eval(await response.text())
+            await y.data()
+        finally:
+            y.dispose()
+    finally:
+        x.dispose()
+    if str(tf.getBackend()) != name:
+        raise RuntimeError(f"Backend {name} not selected")
+
+
+async def load_tfjs(url=None, backend="auto", webgpu_url=None):
+    """Initialize TF.js and choose WebGPU -> WebGL -> CPU.
+
+    Choose backend="webgpu" to require WebGPU (raises if unavailable);
+    use backend="cpu" for deterministic CPU comparison.
+    """
+    global _tf, _webgpu_loaded, _backend_attempts
+    if backend not in ("auto", "webgpu", "webgl", "cpu"):
+        raise ValueError("backend must be 'auto', 'webgpu', 'webgl' or 'cpu'")
+    if globalThis is None:
+        raise RuntimeError("TensorFlow.js requires the browser Pyodide kernel")
+    if _tf is None:
         try:
             _tf = globalThis.tf
-        except AttributeError as exc:
-            raise RuntimeError(f"TensorFlow.js did not initialize from {target}") from exc
-    await _tf.ready()
-    return _tf
+        except AttributeError:
+            target = url or _asset_url()
+            await _load_script(target)
+            try:
+                _tf = globalThis.tf
+            except AttributeError as exc:
+                raise RuntimeError(f"TensorFlow.js did not initialize: {target}") from exc
+    _backend_attempts = []
+    candidates = ("webgpu", "webgl", "cpu") if backend == "auto" else (backend,)
+    for candidate in candidates:
+        try:
+            if candidate == "webgpu":
+                if not _worker_has_webgpu():
+                    raise RuntimeError("navigator.gpu unavailable in the kernel Worker")
+                if not _webgpu_loaded:
+                    await _load_script(webgpu_url or _asset_url("tf-backend-webgpu.min.js"))
+                    _webgpu_loaded = True
+            await _activate_backend(candidate)
+            return _tf
+        except Exception as exc:
+            _backend_attempts.append({"backend": candidate, "error": str(exc)})
+            if backend != "auto":
+                raise RuntimeError(f"Unable to use {candidate}: {exc}") from exc
+    raise RuntimeError("No usable TensorFlow.js backend: " + str(_backend_attempts))
+
+
+def backend_info():
+    """Show active backend, WebGPU availability and fallback reasons."""
+    return {
+        "backend": backend(),
+        "worker_webgpu_available": _worker_has_webgpu(),
+        "fallbacks": list(_backend_attempts),
+    }
 
 
 def _require_tf():
