@@ -42,6 +42,17 @@ python -m http.server 8000 --directory dist
 
 执行层自动处理 TensorFlow.js 的异步训练；教材仍使用标准 Python 写法。仓库的 GitHub Actions 会使用 Chromium 运行 Pyodide、科学计算包、原样 Keras 语句以及 Notebook 内核检测。
 
+## 旧版课程运行环境（compat 分支）
+
+`compat/pyodide-legacy-course` 独立构建旧版 JupyterLite（内核 0.1.1 /
+Pyodide 0.23.4）。它采用 Python 3.11.2、NumPy 1.24.2 和旧版科学计算包，
+并在内核中自动补齐部分历史接口及 TensorFlow 2.6 风格的 Keras API。
+
+该分支的 `site-requirements.txt` 与 `main` 不可互换；只执行上方简化版
+`jupyter lite build` 命令不会安装自定义内核兼容层。构建旧版站点时请按
+[旧版内核构建与版本清单](docs/legacy-compatibility.md) 操作。
+原始 Notebook 保持不变；未来再把新旧内核注册到同一个前端。
+
 ## 自动部署
 
 提交到 `main` 分支后，GitHub Actions 会构建 JupyterLite 并发布到 GitHub Pages。也可以在 Actions 页面手动运行 **Deploy JupyterLite**。
