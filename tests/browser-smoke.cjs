@@ -19,7 +19,8 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
           try {
             const {loadPyodide} = await import('https://cdn.jsdelivr.net/pyodide/v314.0.4/full/pyodide.mjs');
             const py = await loadPyodide({indexURL:'https://cdn.jsdelivr.net/pyodide/v314.0.4/full/'});
-            await py.loadPackage(['numpy','pandas','scipy','matplotlib','scikit-learn']);
+            await py.loadPackage(['numpy','pandas','scipy','matplotlib','scikit-learn','micropip']);
+            await py.runPythonAsync("import micropip; await micropip.install(['ipywidgets', 'ipympl']); import ipywidgets, ipympl; slider = ipywidgets.IntSlider(value=4); assert slider.value == 4");
             const script = await (await fetch(data.bridge)).text();
             py.FS.writeFile('/home/pyodide/tfjs_bridge.py', script);
             const output = await py.runPythonAsync(
