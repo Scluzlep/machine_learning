@@ -1,6 +1,6 @@
 # JupyterLite 0.8 / JupyterLab 4.6 site build dependencies
-jupyterlite-core[translation]==0.8.2
-jupyterlite-pyodide-kernel==0.8.3
+jupyterlite-core[translation]==0.8.6
+jupyterlite-pyodide-kernel==0.8.6
 jupyter-server>=2,<3
 
 # JupyterLite Chinese (Simplified) UI; requires jupyterlab_server
