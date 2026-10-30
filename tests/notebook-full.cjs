@@ -65,6 +65,17 @@ async function runNotebook(browser, relativePath) {
   const context = await browser.newContext();
   const page = await context.newPage();
   try {
+    const notebook = JSON.parse(fs.readFileSync(path.join(source, ...relativePath.split('/')), 'utf8'));
+    let codeOrdinal = 0;
+    const codePlan = notebook.cells.flatMap((cell, index) => {
+      if (cell.cell_type !== 'code') return [];
+      return [{
+        index: index + 1,
+        ordinal: codeOrdinal++,
+        source: Array.isArray(cell.source) ? cell.source.join('') : cell.source,
+      }];
+    });
+    const expected = codePlan.filter(cell => cell.source.trim());
     const response = await page.goto(siteUrl, {
       waitUntil: 'domcontentloaded', timeout: 60000,
     });
@@ -78,37 +89,44 @@ async function runNotebook(browser, relativePath) {
       const text = toolbar?.textContent || '';
       return /Python|Pyodide/i.test(text) && !/No Kernel/i.test(text);
     }, null, { timeout: 60000 });
+    const codeCells = page.locator('.jp-NotebookPanel .jp-CodeCell');
+    const visibleCount = await codeCells.count();
+    assert(visibleCount >= codePlan.length, `Only ${visibleCount} code cells rendered; expected ${codePlan.length}`);
 
-    let timer;
-    try {
-      result.cells = await Promise.race([
-        page.evaluate(async () => {
-        const app = window.jupyterapp;
-        if (!app?.commands || !app?.shell?.currentWidget?.content?.model?.cells) {
-          throw new Error('JupyterLab application API unavailable after notebook opened');
-        }
-        await app.commands.execute('notebook:clear-all-cell-outputs');
-        await app.commands.execute('notebook:run-all-cells');
-        const panel = app.shell.currentWidget;
-        const cells = panel.content.model.cells;
-        const summary = [];
-        for (let i = 0; i < cells.length; i++) {
-          const cell = cells.get(i).toJSON();
-          if (cell.cell_type !== 'code' || !(Array.isArray(cell.source) ? cell.source.join('') : cell.source).trim()) continue;
-          const errors = (cell.outputs || []).filter(output => output.output_type === 'error');
-          summary.push({
-            index: i + 1,
-            executionCount: cell.execution_count ?? null,
-            status: errors.length ? 'error' : cell.execution_count == null ? 'not-run' : 'passed',
-            errors: errors.map(output => ({ ename: output.ename, evalue: output.evalue, traceback: output.traceback })),
-          });
-        }
-        return summary;
-        }),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`Notebook timed out after ${timeout} ms`)), timeout); }),
-      ]);
-    } finally {
-      clearTimeout(timer);
+    for (let ordinal = 0; ordinal < expected.length; ordinal++) {
+      const cell = codeCells.nth(expected[ordinal].ordinal);
+      const sourceText = await cell.locator('.cm-content').first().innerText();
+      assert(sourceText.trim(), `Code cell ${expected[ordinal].index} was not rendered`);
+      const remaining = timeout - (Date.now() - started);
+      if (remaining <= 0) throw new Error(`Notebook timed out after ${timeout} ms`);
+      await page.evaluate(index => {
+        const prompt = document.querySelectorAll('.jp-NotebookPanel .jp-CodeCell')[index]?.querySelector('.jp-InputPrompt');
+        if (!prompt) throw new Error(`Input prompt missing for code cell ${index + 1}`);
+        const initial = prompt.textContent || '';
+        window.__notebookCellRun = { busy: false, done: false, initial };
+        const observer = new MutationObserver(() => {
+          const current = prompt.textContent || '';
+          if (/\[\s*\*\s*\]/.test(current)) window.__notebookCellRun.busy = true;
+          if (/\[\s*\d+\s*\]/.test(current) &&
+              (window.__notebookCellRun.busy || current !== initial)) {
+            window.__notebookCellRun.done = true;
+            observer.disconnect();
+          }
+        });
+        observer.observe(prompt, { childList: true, characterData: true, subtree: true });
+      }, expected[ordinal].ordinal);
+      await cell.click();
+      await page.keyboard.press('Control+Enter');
+      await page.waitForFunction(() => window.__notebookCellRun?.done, null,
+        { timeout: Math.min(210000, remaining) });
+      const output = await cell.locator('.jp-OutputArea').innerText().catch(() => '');
+      const traceback = await cell.locator('.jp-RenderedText.jp-mod-traceback').count();
+      const error = traceback > 0 || /Traceback \(most recent call last\)|(?:^|\n)\w+(?:Error|Exception):/m.test(output);
+      result.cells.push({ index: expected[ordinal].index, status: error ? 'error' : 'passed', output: error ? output.slice(-4000) : undefined });
+      if (error) break;
+    }
+    for (const cell of expected.slice(result.cells.length)) {
+      result.cells.push({ index: cell.index, status: 'not-run' });
     }
     result.status = result.cells.every(cell => cell.status === 'passed') ? 'passed' : 'failed';
     if (result.status === 'failed') result.error = 'One or more code cells failed or were not executed';
