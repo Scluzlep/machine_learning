@@ -17,10 +17,21 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
       const code=`
         self.onmessage = async ({data}) => {
           try {
-            const {loadPyodide} = await import('https://cdn.jsdelivr.net/pyodide/v314.0.4/full/pyodide.mjs');
-            const py = await loadPyodide({indexURL:'https://cdn.jsdelivr.net/pyodide/v314.0.4/full/'});
+            const {loadPyodide} = await import(data.pyodide);
+            const py = await loadPyodide({indexURL:data.pyodideBase});
             await py.loadPackage(['numpy','pandas','scipy','matplotlib','scikit-learn','micropip']);
             await py.runPythonAsync("import micropip; await micropip.install(['ipywidgets', 'ipympl']); import ipywidgets, ipympl; slider = ipywidgets.IntSlider(value=4); assert slider.value == 4");
+            await py.loadPackage(['h5py', 'pillow']);
+            await py.runPythonAsync(
+                "import h5py\\n"
+              + "from PIL import Image\\n"
+              + "import numpy as np\\n"
+              + "with h5py.File('/tmp/ml-wheel-probe.h5', 'w') as f:\\n"
+              + "    f['values'] = np.array([2, 3, 5])\\n"
+              + "with h5py.File('/tmp/ml-wheel-probe.h5', 'r') as f:\\n"
+              + "    assert f['values'][:].tolist() == [2, 3, 5]\\n"
+              + "assert Image.new('RGB', (3, 2)).size == (3, 2)\\n"
+            );
             const script = await (await fetch(data.bridge)).text();
             py.FS.writeFile('/home/pyodide/tfjs_bridge.py', script);
             py.FS.mkdirTree('/home/pyodide/browser_ml');
@@ -121,7 +132,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
         const timer=setTimeout(()=>{worker.terminate();reject(Error('Pyodide/TF.js smoke test timed out'));},150000);
         worker.onmessage=e=>{clearTimeout(timer);worker.terminate();URL.revokeObjectURL(blob);resolve(e.data)};
         worker.onerror=e=>{clearTimeout(timer);worker.terminate();reject(Error(e.message||'Worker error'))};
-        worker.postMessage({bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,compat:`http://127.0.0.1:${port}/vendor/tfjs_compat.py`,losses:`http://127.0.0.1:${port}/vendor/course-losses.js`,tfjs:src});
+        worker.postMessage({pyodide:`http://127.0.0.1:${port}/pyodide/pyodide.mjs`,pyodideBase:`http://127.0.0.1:${port}/pyodide/`,bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,compat:`http://127.0.0.1:${port}/vendor/tfjs_compat.py`,losses:`http://127.0.0.1:${port}/vendor/course-losses.js`,tfjs:src});
       });
     },port);
     console.log('Browser scientific/TensorFlow.js backend test:', JSON.stringify(outcome));
