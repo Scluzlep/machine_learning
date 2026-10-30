@@ -87,6 +87,10 @@ jobs:
           cp machine_learning/browser_ml/tfjs_compat.py dist/vendor/tfjs_compat.py
           cp machine_learning/browser_ml/tfjs_tensor.py dist/vendor/tfjs_tensor.py
           cp machine_learning/browser_ml/tfjs_layers.py dist/vendor/tfjs_layers.py
+      - name: Repair old Worker Webpack dynamic import
+        run: |
+          python tests/test-legacy-worker-patch.py
+          python tools/ml_kernel/patch_legacy_worker.py --dist dist
       - name: Diagnose old Worker bundled dynamic import and federated extensions
         run: |
           python - <<'PY'

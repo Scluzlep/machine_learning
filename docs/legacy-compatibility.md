@@ -71,3 +71,13 @@ The legacy kernel bootstraps IPython before cell hooks run. To avoid a 2026
 micropip resolver conflict (`ipympl 0.9.3` requires `ipython<9` while
 unconstrained installs prefer 9.x), the local Piplite index also bundles
 `ipython==8.12.3`, and the cell hook checks the same pin.
+
+## Webpack Worker module loading
+
+JupyterLite Pyodide kernel 0.1.1's published Worker bundle transforms
+`await import(pyodideUrl)` into a Webpack require-context module that always
+throws `MODULE_NOT_FOUND`. After building `dist/`, run
+`python tools/ml_kernel/patch_legacy_worker.py --dist dist`. This strictly
+patches a single compiled `loadPyodide` reference back into browser-native
+`import(url)`; a missing or ambiguous match **fails the build**. The original
+upstream kernel source, wheel contents, and lesson Notebooks are untouched.

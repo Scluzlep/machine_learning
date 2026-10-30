@@ -85,6 +85,10 @@ jobs:
           PY
       - name: Build static site
         run: jupyter lite build --contents .ml-contents --output-dir dist
+      - name: Fix JupyterLite 0.1.1 Webpack Worker import
+        run: |
+          python tests/test-legacy-worker-patch.py
+          python tools/ml_kernel/patch_legacy_worker.py --dist dist
       - name: Self-host Pyodide WebAssembly and standard library
         run: |
           npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@0.23.4
