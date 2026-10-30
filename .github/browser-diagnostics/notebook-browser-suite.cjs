@@ -52,39 +52,64 @@ function fromNotebook(file) {
 function buildUrl(file) {
   return new URL('lab/tree/' + file.split('/').map(encodeURIComponent).join('/'),base).href;
 }
-async function collect(page,source,tracking) {
-  const dom = await page.evaluate(() => {
-    const cells=[...document.querySelectorAll('.jp-NotebookPanel .jp-CodeCell')];
-    return cells.map((cell,index)=>({
-      index,
-      prompt:(cell.querySelector('.jp-InputPrompt')?.textContent||'').trim(),
-      busy:/\[\s*\*\s*\]/.test(cell.querySelector('.jp-InputPrompt')?.textContent||''),
-      outputs:[...cell.querySelectorAll('.jp-OutputArea-output')].map(out=>({
-        mime:out.getAttribute('data-mime-type'),
-        text:(out.innerText||out.textContent||'').slice(0,200000),
-        htmlLength:(out.innerHTML||'').length,
-        hasError:!!out.querySelector('.jp-RenderedError,.jp-error,[data-mime-type="application/vnd.jupyter.error+json"]')
-      }))
-    }));
-  }).catch(err=>({readError:errorText(err)}));
-  if(!Array.isArray(dom)) return {readError:dom};
-  const watched=tracking?.seen||[];
-  const cells=source.code.map((cell,index)=>{
-    const ui=dom[index];
-    const output=ui?.outputs||[];
-    const combined=output.map(x=>x.text).join('\n');
-    const hasError=output.some(x=>x.hasError) ||
-      /Traceback \(most recent call last\)|(?:ModuleNotFoundError|ImportError|NameError|AttributeError|TypeError|ValueError|NotImplementedError|RuntimeError|OSError|FileNotFoundError|AssertionError|SyntaxError):/i.test(combined);
-    const visited=watched.includes(index);
-    return {cellIndex:cell.cellIndex,codeIndex:index,source:cell.source.slice(0,100000),
-      status: hasError?'FAIL':visited?'PASS':'NOT_EXECUTED',
-      prompt:ui?.prompt||null,seenNewExecution:visited,
-      outputs:output,hasError};
-  });
-  return {cells,renderedCodeCells:dom.length,sourceCodeCells:source.code.length,
-    pass:cells.filter(x=>x.status==='PASS').length,
-    fail:cells.filter(x=>x.status==='FAIL').length,
-    unexecuted:cells.filter(x=>x.status==='NOT_EXECUTED').length};
+async function collect(page,source,tracking,rel) {
+  // The UI virtualizes long notebooks. Ask JupyterLite's Contents API for
+  // the complete saved document, not document.querySelectorAll('.jp-CodeCell').
+  const endpoint=new URL('api/contents/'+rel.split('/').map(encodeURIComponent).join('/'),base).href;
+  let model;
+  try {
+    await page.keyboard.press('Control+s');
+    await sleep(1000);
+    model=await page.evaluate(async url=>{
+      const response=await fetch(url,{cache:'no-store'});
+      if(!response.ok)throw Error('JupyterLite Contents API returned HTTP '+response.status);
+      const data=await response.json();
+      return data.content || data;
+    },endpoint);
+  }catch(e) {
+    log('WARN','Contents API unavailable for '+rel+': '+errorText(e));
+  }
+  if(model && Array.isArray(model.cells)) {
+    const code=model.cells.filter(c=>c.cell_type==='code');
+    const cells=source.code.map((cell,index)=>{
+      const current=code[index];
+      const outputs=(current?.outputs||[]).map(o=>{
+        const data=o.data||{};
+        const plain=data['text/plain'];
+        const txt=o.text||plain||'';
+        const value={
+          type:o.output_type||'unknown',ename:o.ename||null,
+          evalue:o.evalue||null,mimeTypes:Object.keys(data),
+          text:text(txt).slice(0,maxCellText),
+          traceback:text(o.traceback).slice(0,maxCellText)
+        };
+        if(data['image/png'])value.imageBytesApprox=Math.round(String(data['image/png']).length*0.75);
+        return value;
+      });
+      const hasError=outputs.some(o=>o.type==='error'||o.ename||/Traceback \(most recent call last\)/.test(o.traceback));
+      const executed=typeof current?.execution_count==='number';
+      return {cellIndex:cell.cellIndex,codeIndex:index,source:cell.source.slice(0,100000),
+        status:hasError?'FAIL':executed?'PASS':'NOT_EXECUTED',
+        executionCount:current?.execution_count??null,outputs,hasError};
+    });
+    return {method:'JupyterLite Contents API (whole document)',cells,
+      sourceCodeCells:source.code.length,modelCodeCells:code.length,
+      pass:cells.filter(c=>c.status==='PASS').length,
+      fail:cells.filter(c=>c.status==='FAIL').length,
+      unexecuted:cells.filter(c=>c.status==='NOT_EXECUTED').length};
+  }
+  // Explicitly report incomplete coverage rather than falsely claiming PASS.
+  const dom=await page.evaluate(()=>[...document.querySelectorAll('.jp-NotebookPanel .jp-CodeCell')].map((c,index)=>({
+    index,prompt:c.querySelector('.jp-InputPrompt')?.textContent||'',
+    output:[...c.querySelectorAll('.jp-OutputArea-output')].map(x=>x.innerText||x.textContent||'')
+  }))).catch(e=>[]);
+  const cells=source.code.map((c,i)=>({
+    cellIndex:c.cellIndex,codeIndex:i,source:c.source.slice(0,100000),
+    status:'NOT_VERIFIED',outputs:[],executionCount:null
+  }));
+  return {method:'Incomplete virtualized DOM fallback; NOT verified',
+    cells,visibleCodeCells:dom,sourceCodeCells:source.code.length,
+    pass:0,fail:0,unexecuted:cells.length};
 }
 
 async function openNotebook(page,rel) {
@@ -202,8 +227,9 @@ async function recordNotebook(rel) {
           const cells=[...document.querySelectorAll('.jp-NotebookPanel .jp-CodeCell')];
           const active=cells.some(c=>/\[\s*\*\s*\]/.test(c.querySelector('.jp-InputPrompt')?.textContent||''));
           const kernelText=document.querySelector('.jp-NotebookPanel .jp-Toolbar')?.textContent||'';
+          const kernelStatus=[...document.querySelectorAll('.jp-KernelStatus')].map(x=>x.textContent).join(' ');
           return {seen:obj?.seen||[],seenBusy:obj?.seenBusy||[],changed:obj?.changed||[],
-            active,kernelText,uiCodeCells:cells.length};
+            active,kernelText,kernelStatus,uiCodeCells:cells.length};
         });
         const compact=JSON.stringify({seen:snapshot.seen,active:snapshot.active,ui:snapshot.uiCodeCells});
         if(compact!==previous) {
@@ -212,18 +238,25 @@ async function recordNotebook(rel) {
           record.progress.push({at:timestamp(),...snapshot});
           log('PROGRESS',rel+' '+compact);
         }
-        if(snapshot.seen.length>=source.code.length && !snapshot.active) stable++;
+        const idle=/空闲|Idle/i.test(snapshot.kernelStatus||'') && !/忙碌|Busy/i.test(snapshot.kernelStatus||'');
+        if(snapshot.seen.length>0 && !snapshot.active && idle) stable++;
         else stable=0;
-        if(stable>=3){finished=true;break;}
+        if(stable>=6){finished=true;break;}
       }
       const tracking=await page.evaluate(()=>window.__mlNotebookTrack?.state||null);
-      record.execution=await collect(page,source,tracking);
+      record.execution=await collect(page,source,tracking,rel);
       record.finished=finished;
-      if(!finished) record.errors.push('Timed out waiting for ALL code cells to execute ('+timeoutMs+'ms)');
+      if(!finished) record.errors.push('Timed out waiting for Notebook kernel to become idle after run-all ('+timeoutMs+'ms)');
+      if(record.execution.modelCodeCells!==undefined && record.execution.modelCodeCells!==source.code.length)
+        record.errors.push('Contents API code cell count mismatch');
       if(record.execution.fail) record.errors.push(record.execution.fail+' code cell(s) have Python error output');
-      if(record.execution.unexecuted) record.errors.push(record.execution.unexecuted+' code cell(s) not observed executing');
+      if(record.execution.unexecuted) record.errors.push(record.execution.unexecuted+' code cell(s) have no verified new execution result');
       if(record.consoleErrors.length) record.errors.push(record.consoleErrors.length+' browser console error(s)');
       if(record.httpFailures.length) record.errors.push(record.httpFailures.length+' failed HTTP request(s)');
+      if(record.execution.cells) for(const cell of record.execution.cells) {
+        append(logs,{kind:'code-cell-result',codeIndex:cell.codeIndex,status:cell.status,
+          executionCount:cell.executionCount,outputTypes:(cell.outputs||[]).map(x=>x.type)});
+      }
       record.status=record.errors.length?'FAIL':'PASS';
     }
   }catch(e) {
