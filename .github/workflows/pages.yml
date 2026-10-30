@@ -75,7 +75,10 @@ jobs:
           wheel_dir = Path('.ml-wheel')
           packages = [f'ipympl=={version("ipympl")}',
                       f'ipywidgets=={version("ipywidgets")}',
-                      'seaborn==0.11.2', 'ipython==8.12.3']
+                      'seaborn==0.11.2', 'ipython==8.12.3',
+                      'widgetsnbextension==3.5.2',
+                      'jupyterlab-widgets==1.1.11',
+                      'ipython-genutils==0.2.0']
           subprocess.run(
               [sys.executable, '-m', 'pip', 'download', '--no-deps',
                '--only-binary=:all:', '--dest', str(wheel_dir), *packages],

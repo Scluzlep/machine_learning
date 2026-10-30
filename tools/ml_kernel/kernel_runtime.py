@@ -37,8 +37,18 @@ async def initialize_course_dependencies():
     import piplite
     from .imports_bootstrap import _register_ipympl_backends
 
-    await piplite.install(["ipython==8.12.3", "ipywidgets==7.6.5",
-                           "ipympl==0.9.3", "seaborn==0.11.2"])
+    # In the Pyodide worker, install browser widgets without dragging native
+    # Jupyter Server / recent ipykernel / tornado dependencies from PyPI.
+    # The actual kernel already provides IPython, comm, traitlets and ipykernel;
+    # all compiled data/scientific libraries were loaded from Pyodide above.
+    await piplite.install(
+        ["widgetsnbextension==3.5.2", "jupyterlab-widgets==1.1.11",
+         "ipython-genutils==0.2.0"], deps=False
+    )
+    await piplite.install(
+        ["ipywidgets==7.6.5", "ipympl==0.9.3", "seaborn==0.11.2"],
+        deps=False
+    )
     _register_ipympl_backends()
     from .chinese_font import install as install_chinese_font
     await install_chinese_font()

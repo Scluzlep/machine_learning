@@ -49,7 +49,8 @@ jobs:
           import subprocess, sys
           packages=[f'ipywidgets=={version("ipywidgets")}',
                     f'ipympl=={version("ipympl")}', 'seaborn==0.11.2',
-                    'ipython==8.12.3']
+                    'ipython==8.12.3', 'widgetsnbextension==3.5.2',
+                    'jupyterlab-widgets==1.1.11', 'ipython-genutils==0.2.0']
           subprocess.run([sys.executable,'-m','pip','download','--no-deps',
                           '--only-binary=:all:','--dest','.ml-wheel',*packages],check=True)
           print('Bundled legacy wheels:',[p.name for p in Path('.ml-wheel').glob('*.whl')])

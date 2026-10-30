@@ -7,4 +7,6 @@ jupyterlab-language-pack-zh-CN==3.5.post4
 # Reproduce the 2021 course widget APIs and compatible JupyterLab front end.
 ipywidgets==7.6.5
 ipympl==0.9.3
-jupyterlab-widgets>=1.0,<2
+jupyterlab-widgets==1.1.11
+# Avoid bringing JupyterLab 4 federated extension into JupyterLab 3.5.
+jupyterlab-pygments==0.2.2

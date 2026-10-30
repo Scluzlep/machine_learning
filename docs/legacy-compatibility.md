@@ -81,3 +81,16 @@ throws `MODULE_NOT_FOUND`. After building `dist/`, run
 patches a single compiled `loadPyodide` reference back into browser-native
 `import(url)`; a missing or ambiguous match **fails the build**. The original
 upstream kernel source, wheel contents, and lesson Notebooks are untouched.
+
+## Browser widget dependency isolation
+
+Old `ipywidgets==7.6.5` requests `widgetsnbextension~=3.5.0` from
+PyPI; using a late-2026 resolver without a local wheel can fail in Pyodide
+(`Can't find a pure Python 3 wheel`). The exact legacy
+`widgetsnbextension==3.5.2`, `ipython-genutils==0.2.0`, and
+`jupyterlab-widgets==1.1.11` are added to the local Piplite wheel index.
+The worker installs these known Python-side extensions with `deps=False`
+to avoid accidentally downloading native Jupyter Server and new Tornado
+dependencies. The old kernel separately supplies its pinned IPython,
+ipykernel and traitlets. Host-side `jupyterlab-pygments` is pinned to
+JupyterLab 3-era 0.2.2 to avoid the newer 0.3.x JupyterLab 4 extension.
