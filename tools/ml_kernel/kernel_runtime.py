@@ -81,6 +81,10 @@ def transform_tf_fit(code: str) -> str:
 async def prepare_cell(code: str) -> str:
     if not isinstance(code, str):
         return code
+    # Resolve hidden imports such as lab_utils_uni -> ipywidgets before
+    # executing the original unchanged course cell.
+    from .imports_bootstrap import install_missing
+    await install_missing(code)
     if (re.search(r"(?:^|\n)\s*(?:import tensorflow|from tensorflow\b)", code)
             and "tensorflow" not in sys.modules):
         # The kernel's regular dependency loader runs after this hook.
