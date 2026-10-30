@@ -62,6 +62,10 @@ jobs:
           PY
       - name: Build static site
         run: jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel/pyodide_kernel-0.8.6-py3-none-any.whl
+      - name: Self-host Pyodide WebAssembly and standard library
+        run: |
+          npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@314.0.6
+          python tools/ml_kernel/vendor_pyodide.py --dist dist --base-path /machine_learning
       - name: Bundle TensorFlow.js for browser and Pyodide workers
         run: |
           npm install --prefix .tfjs-vendor --no-save --ignore-scripts --no-audit --no-fund @tensorflow/tfjs@4.22.0 @tensorflow/tfjs-backend-webgpu@4.22.0
@@ -81,6 +85,10 @@ jobs:
           output=pathlib.Path('dist')
           assert (output/'lab/index.html').exists()
           assert (output/'vendor/tf.min.js').stat().st_size > 100000
+          assert (output/'pyodide/pyodide.asm.wasm').stat().st_size > 5000000
+          js = json.loads((output/'jupyter-lite.json').read_text())
+          opts=js['jupyter-config-data']['litePluginSettings']['@jupyterlite/pyodide-kernel-extension:kernel']
+          assert opts['pyodideUrl']=='/machine_learning/pyodide/pyodide.mjs'
           assert (output/'vendor/tf-backend-webgpu.min.js').stat().st_size > 100000
           assert (output/'api/translations/zh_CN.json').exists()
           assert any(output.rglob('pyodide_kernel-0.8.6-py3-none-any.whl')), 'Patched Pyodide kernel wheel not deployed'
