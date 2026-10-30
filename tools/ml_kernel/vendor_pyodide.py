@@ -40,7 +40,7 @@ COURSE_PACKAGES = (
 
 # Needed by the final HDF5 and image exercises; available from the local
 # Pyodide package lock but deliberately not preloaded at kernel startup.
-ON_DEMAND_COURSE_PACKAGES = ("h5py", "Pillow")
+ON_DEMAND_COURSE_PACKAGES = ("h5py", "pillow")
 
 
 

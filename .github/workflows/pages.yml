@@ -115,7 +115,7 @@ jobs:
           assert (output/'vendor/tf.min.js').stat().st_size > 100000
           assert (output/'pyodide/pyodide.asm.wasm').stat().st_size > 5000000
           lock=json.loads((output/'pyodide/pyodide-lock.json').read_text())['packages']
-          for extra in ('h5py', 'Pillow'):
+          for extra in ('h5py', 'pillow'):
               filename=lock[extra]['file_name']
               assert '://' not in filename, f'{extra} must be self-hosted'
               assert (output/'pyodide'/filename).is_file(), f'Missing {extra} wheel'
