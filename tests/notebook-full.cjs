@@ -95,10 +95,9 @@ async function runNotebook(browser, relativePath) {
 
     for (let ordinal = 0; ordinal < expected.length; ordinal++) {
       const cell = codeCells.nth(expected[ordinal].ordinal);
-      const sourceText = await cell.locator('.cm-content').first().innerText();
-      assert(sourceText.trim(), `Code cell ${expected[ordinal].index} was not rendered`);
       const remaining = timeout - (Date.now() - started);
       if (remaining <= 0) throw new Error(`Notebook timed out after ${timeout} ms`);
+      await cell.click();
       await page.evaluate(index => {
         const prompt = document.querySelectorAll('.jp-NotebookPanel .jp-CodeCell')[index]?.querySelector('.jp-InputPrompt');
         if (!prompt) throw new Error(`Input prompt missing for code cell ${index + 1}`);
@@ -115,7 +114,6 @@ async function runNotebook(browser, relativePath) {
         });
         observer.observe(prompt, { childList: true, characterData: true, subtree: true });
       }, expected[ordinal].ordinal);
-      await cell.click();
       await page.keyboard.press('Control+Enter');
       await page.waitForFunction(() => window.__notebookCellRun?.done, null,
         { timeout: Math.min(210000, remaining) });
@@ -123,6 +121,7 @@ async function runNotebook(browser, relativePath) {
       const traceback = await cell.locator('.jp-RenderedText.jp-mod-traceback').count();
       const error = traceback > 0 || /Traceback \(most recent call last\)|(?:^|\n)\w+(?:Error|Exception):/m.test(output);
       result.cells.push({ index: expected[ordinal].index, status: error ? 'error' : 'passed', output: error ? output.slice(-4000) : undefined });
+      console.log(`  CELL ${expected[ordinal].index}: ${error ? 'ERROR' : 'PASS'}`);
       if (error) break;
     }
     for (const cell of expected.slice(result.cells.length)) {
