@@ -51,6 +51,7 @@ jobs:
           )"
           python tools/ml_kernel/build_custom_kernel.py "$KERNEL_WHEEL" --output .ml-wheel
           python tests/test-kernel-transform.py
+          python tests/test-imports-bootstrap.py
           python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
           python - <<'PY'
           import json
@@ -103,6 +104,7 @@ jobs:
           node tests/browser-smoke.cjs
           node tests/repl-zero-edit.cjs
           node tests/notebook-ui.cjs
+          node tests/notebook-imports.cjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
