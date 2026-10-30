@@ -9,6 +9,7 @@ on:
       - 'jupyter_lite_config.json'
       - 'overrides.json'
       - '.github/workflows/pages.yml'
+      - 'tests/**'
   workflow_dispatch:
 
 permissions:
@@ -37,6 +38,26 @@ jobs:
         run: python -m pip install -r site-requirements.txt
       - name: Build static site
         run: jupyter lite build --contents machine_learning --output-dir dist
+      - name: Bundle TensorFlow.js for browser and Pyodide workers
+        run: |
+          npm install --prefix .tfjs-vendor --no-save --ignore-scripts --no-audit --no-fund @tensorflow/tfjs@4.22.0
+          mkdir -p dist/vendor
+          cp .tfjs-vendor/node_modules/@tensorflow/tfjs/dist/tf.min.js dist/vendor/tf.min.js
+          test -s dist/vendor/tf.min.js
+      - name: Verify notebook syntax and static resources
+        run: |
+          python -m compileall -q machine_learning/browser_ml
+          python - <<'PY'
+          import json, pathlib
+          files=list(pathlib.Path('machine_learning').rglob('*.ipynb'))
+          assert len(files)>=43, len(files)
+          for f in files: json.loads(f.read_text(encoding='utf-8'))
+          output=pathlib.Path('dist')
+          assert (output/'lab/index.html').exists()
+          assert (output/'vendor/tf.min.js').stat().st_size > 100000
+          assert (output/'api/translations/zh_CN.json').exists()
+          print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
+          PY
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
