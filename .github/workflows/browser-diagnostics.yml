@@ -149,7 +149,7 @@ jobs:
             });
             await dump(repl,'repl-output.json');await repl.close().catch(()=>{});
             await test('Console errors, JS chunks and HTTP 5xx',async()=>{
-              if(critical.length)throw Error(JSON.stringify(critical.slice(0,30)));
+              if(critical.length || counts.consoleErrors)throw Error(JSON.stringify({counts,critical:critical.slice(0,30)}));
               return JSON.stringify(counts);
             });
           }
