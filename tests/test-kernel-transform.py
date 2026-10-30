@@ -14,6 +14,16 @@ spec.loader.exec_module(module)
 
 model_code = "model = Sequential([Dense(3, activation='sigmoid')])"
 assert module.transform_tf_fit(model_code) == model_code
+# The 44-notebook assignment also trains models stored in a list.
+collection_code = (
+    "models = [None] * 3\n"
+    "for i in range(3):\n"
+    "    models[i] = Sequential([Dense(4)])\n"
+    "    models[i].fit(X, y, epochs=10)\n"
+)
+collection_transformed = module.transform_tf_fit(collection_code)
+assert "await models[i].fit(" in collection_transformed
+compile(collection_transformed, "<cell>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
 normal = "reg.fit(X, y)\nscaler.fit(X)"
 assert module.transform_tf_fit(normal) == normal
 transformed = module.transform_tf_fit("model.fit(Xt, Yt, epochs=10)")

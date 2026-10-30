@@ -50,9 +50,11 @@ jobs:
           PY
           )"
           python tools/ml_kernel/build_custom_kernel.py "$KERNEL_WHEEL" --output .ml-wheel
+          python tests/test-notebook-integrity.py
           python tests/test-kernel-transform.py
           python tests/test-imports-bootstrap.py
           python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
+          python tests/test-notebook-integrity.py --staged .ml-contents
           python - <<'PY'
           import json
           from pathlib import Path

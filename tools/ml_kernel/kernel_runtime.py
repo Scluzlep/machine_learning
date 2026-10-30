@@ -10,6 +10,7 @@ import re
 import sys
 
 _TF_MODEL_NAMES: set[str] = set()
+_TF_MODEL_COLLECTIONS: set[str] = set()
 _COURSE_DEPENDENCIES_READY = False
 
 
@@ -45,8 +46,9 @@ def _is_tf_constructor(node: ast.AST) -> bool:
 
 
 class _ModelFitTransformer(ast.NodeTransformer):
-    def __init__(self, names: set[str]):
+    def __init__(self, names: set[str], collections: set[str]):
         self.names = names
+        self.collections = collections
         self.changed = False
 
     def visit_FunctionDef(self, node):
@@ -67,7 +69,12 @@ class _ModelFitTransformer(ast.NodeTransformer):
         if (isinstance(func, ast.Attribute)
                 and func.attr == "fit"
                 and isinstance(func.value, ast.Name)
-                and func.value.id in self.names):
+                and func.value.id in self.names) or (
+                isinstance(func, ast.Attribute)
+                and func.attr == "fit"
+                and isinstance(func.value, ast.Subscript)
+                and isinstance(func.value.value, ast.Name)
+                and func.value.value.id in self.collections):
             self.changed = True
             return ast.copy_location(ast.Await(node), node)
         return node
@@ -75,7 +82,7 @@ class _ModelFitTransformer(ast.NodeTransformer):
 
 def transform_tf_fit(code: str) -> str:
     """Only transform calls on variables known to hold TF.js Keras models."""
-    if "Sequential" not in code and (".fit(" not in code or not _TF_MODEL_NAMES):
+    if "Sequential" not in code and (".fit(" not in code or not (_TF_MODEL_NAMES or _TF_MODEL_COLLECTIONS)):
         return code
     if re.search(r"^\s*[%!]", code, re.MULTILINE):
         return code
@@ -83,17 +90,19 @@ def transform_tf_fit(code: str) -> str:
         tree = ast.parse(code)
     except SyntaxError:
         return code
-    for node in tree.body:
+    for node in ast.walk(tree):
         if isinstance(node, ast.Assign) and _is_tf_constructor(node.value):
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     _TF_MODEL_NAMES.add(target.id)
+                elif isinstance(target, ast.Subscript) and isinstance(target.value, ast.Name):
+                    _TF_MODEL_COLLECTIONS.add(target.value.id)
         elif isinstance(node, ast.AnnAssign) and _is_tf_constructor(node.value):
             if isinstance(node.target, ast.Name):
                 _TF_MODEL_NAMES.add(node.target.id)
-    if not _TF_MODEL_NAMES or ".fit(" not in code:
+    if not (_TF_MODEL_NAMES or _TF_MODEL_COLLECTIONS) or ".fit(" not in code:
         return code
-    transformer = _ModelFitTransformer(_TF_MODEL_NAMES)
+    transformer = _ModelFitTransformer(_TF_MODEL_NAMES, _TF_MODEL_COLLECTIONS)
     new_tree = transformer.visit(tree)
     if not transformer.changed:
         return code
@@ -117,6 +126,18 @@ async def prepare_cell(code: str) -> str:
         await loadPackagesFromImports("import numpy")
         from .auto_tfjs.tfjs_compat import install
         await install()
+    # Repair only the removed sklearn APIs used by historical course cells.
+    # Load native Pyodide wheels before importing the relevant modules.
+    if re.search(r"\bload_boston\b", code):
+        from pyodide_js import loadPackagesFromImports
+        await loadPackagesFromImports("import sklearn")
+        from .legacy_scikit import install_boston
+        install_boston()
+    if re.search(r"\bfrom\s+sklearn\.linear_model\s+import\b", code):
+        from pyodide_js import loadPackagesFromImports
+        await loadPackagesFromImports("import sklearn")
+        from .legacy_scikit import install_linear_regression
+        install_linear_regression()
     if "tensorflow" not in sys.modules:
         return code
     return transform_tf_fit(code)

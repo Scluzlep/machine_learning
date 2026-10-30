@@ -38,6 +38,10 @@ def build(wheel: Path, root: Path, destination: Path) -> Path:
     files["pyodide_kernel/kernel_runtime.py"] = (root / "tools/ml_kernel/kernel_runtime.py").read_bytes()
     files["pyodide_kernel/imports_bootstrap.py"] = (root / "tools/ml_kernel/imports_bootstrap.py").read_bytes()
     files["pyodide_kernel/chinese_font.py"] = (root / "tools/ml_kernel/chinese_font.py").read_bytes()
+    files["pyodide_kernel/legacy_scikit.py"] = (root / "tools/ml_kernel/legacy_scikit.py").read_bytes()
+    files["pyodide_kernel/legacy_data/boston_house_prices.csv"] = (
+        root / "tools/ml_kernel/legacy_data/boston_house_prices.csv"
+    ).read_bytes()
     files["pyodide_kernel/auto_tfjs/__init__.py"] = b""
     for name in ("tfjs_bridge.py", "tfjs_compat.py"):
         files["pyodide_kernel/auto_tfjs/" + name] = (
