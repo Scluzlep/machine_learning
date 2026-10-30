@@ -19,7 +19,7 @@ ipywidgets 7.6.5 and ipympl 0.9.3.
 | JupyterLite core/kernel | 0.1.3 / 0.1.1 | matching legacy JupyterLab frontend |
 | JupyterLab | 3.5.3 | legacy frontend, not the modern main |
 | NumPy | 1.24.2 | NumPy 1.x aliases reintroduced at runtime |
-| SciPy | 1.9.3 | removed image functions restored using Pillow |
+| SciPy | 1.9.3 | removed `scipy.misc.imresize` and `scipy.ndimage.imread` restored using Pillow |
 | scikit-learn | 1.2.2 | `load_boston` and `normalize=False` adapter |
 | pandas | 1.5.3 | same major version as original |
 | Matplotlib | 3.5.2 | classic IPython widget backend registration |

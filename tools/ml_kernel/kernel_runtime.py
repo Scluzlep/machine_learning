@@ -114,6 +114,14 @@ def transform_tf_fit(code: str) -> str:
     return ast.unparse(new_tree)
 
 
+def uses_legacy_scipy(code: str) -> bool:
+    """Check references to SciPy image APIs removed before this WASM release."""
+    return bool(re.search(
+        r"\b(?:(?:scipy\.)?misc\.(?:imread|imresize|imsave)"
+        r"|(?:scipy\.)?ndimage\.imread)\b", code
+    ))
+
+
 async def prepare_cell(code: str) -> str:
     if not isinstance(code, str):
         return code
@@ -145,7 +153,7 @@ async def prepare_cell(code: str) -> str:
         await loadPackagesFromImports("import sklearn")
         from .legacy_scikit import install_linear_regression
         install_linear_regression()
-    if re.search(r"\b(?:scipy\.misc|misc\.(?:imread|imresize|imsave))\b", code):
+    if uses_legacy_scipy(code):
         from pyodide_js import loadPackage
         await loadPackage(["scipy", "Pillow"])
         from .legacy_scipy import install as install_scipy

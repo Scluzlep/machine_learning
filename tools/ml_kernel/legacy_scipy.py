@@ -17,6 +17,12 @@ def install():
                 return np.asarray(original)
         misc.imread = imread
 
+    # The original logistic-regression image exercise also calls
+    # scipy.ndimage.imread (removed alongside the scipy.misc aliases).
+    import scipy.ndimage as ndimage
+    if not hasattr(ndimage, "imread"):
+        ndimage.imread = misc.imread
+
     if not hasattr(misc, "imresize"):
         def imresize(array, size, interp="bilinear", mode=None):
             method = {

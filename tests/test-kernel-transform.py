@@ -24,6 +24,10 @@ collection_code = (
 collection_transformed = module.transform_tf_fit(collection_code)
 assert "await models[i].fit(" in collection_transformed
 compile(collection_transformed, "<cell>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+assert module.uses_legacy_scipy("img = scipy.misc.imresize(source, (64, 64))")
+assert module.uses_legacy_scipy("image = ndimage.imread(filename)")
+assert module.uses_legacy_scipy("image = scipy.ndimage.imread(filename)")
+assert not module.uses_legacy_scipy("from scipy import ndimage\nfiltered = ndimage.gaussian_filter(X, 1)")
 normal = "reg.fit(X, y)\nscaler.fit(X)"
 assert module.transform_tf_fit(normal) == normal
 transformed = module.transform_tf_fit("model.fit(Xt, Yt, epochs=10)")
