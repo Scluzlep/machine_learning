@@ -38,6 +38,10 @@ COURSE_PACKAGES = (
     "micropip",
 )
 
+# Needed by the final HDF5 and image exercises; available from the local
+# Pyodide package lock but deliberately not preloaded at kernel startup.
+ON_DEMAND_COURSE_PACKAGES = ("h5py", "Pillow")
+
 
 
 def _wheel_closure(packages: dict, roots: tuple[str, ...]) -> set[str]:
@@ -89,11 +93,11 @@ def _download_wheel(name: str, metadata: dict, dest: Path) -> int:
 
 
 def _vendor_scientific_wheels(dest: Path, lock_file: Path):
-    """Serve fixed scientific wheels locally; preserve CDN URLs for other packages."""
+    """Serve scientific, HDF5 and imaging wheels locally; preserve other CDN URLs."""
     lock = json.loads(lock_file.read_text(encoding="utf-8"))
     packages = lock["packages"]
-    roots = _wheel_closure(packages, COURSE_PACKAGES)
-    missing = [n for n in COURSE_PACKAGES if n not in packages]
+    roots = _wheel_closure(packages, COURSE_PACKAGES + ON_DEMAND_COURSE_PACKAGES)
+    missing = [n for n in COURSE_PACKAGES + ON_DEMAND_COURSE_PACKAGES if n not in packages]
     if missing:
         raise RuntimeError(f"Official Pyodide lock lacks requested packages: {missing}")
     wanted = [(name, packages[name]) for name in sorted(roots)
