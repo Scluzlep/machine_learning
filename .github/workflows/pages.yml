@@ -121,7 +121,7 @@ jobs:
               assert (output/'pyodide'/filename).is_file(), f'Missing {extra} wheel'
           js = json.loads((output/'jupyter-lite.json').read_text())
           opts=js['jupyter-config-data']['litePluginSettings']['@jupyterlite/pyodide-kernel-extension:kernel']
-          assert opts['pyodideUrl']=='/machine_learning/pyodide/pyodide.js'
+          assert opts['pyodideUrl']=='/machine_learning/pyodide/pyodide.mjs'
           assert (output/'vendor/tf-backend-webgpu.min.js').stat().st_size > 100000
           assert (output/'vendor/course-losses.js').stat().st_size > 500
           assert (output/'assets/fonts/SourceHanSansSC-Regular.otf').stat().st_size == 16529832

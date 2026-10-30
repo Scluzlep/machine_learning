@@ -110,7 +110,7 @@ def vendor(dist: Path, npm_package: Path, base_path: str) -> None:
     config = json.loads(config_file.read_text(encoding="utf-8"))
     settings = config.setdefault("jupyter-config-data", {}).setdefault("litePluginSettings", {})
     kernel = settings.setdefault("@jupyterlite/pyodide-kernel-extension:kernel", {})
-    kernel["pyodideUrl"] = f"{base_path.rstrip('/')}/pyodide/pyodide.js"
+    kernel["pyodideUrl"] = f"{base_path.rstrip('/')}/pyodide/pyodide.mjs"
     # Older workers have no loadPyodideOptions support. Package preloading
     # takes place before the first cell in kernel_runtime.py.
     kernel.pop("loadPyodideOptions", None)

@@ -56,7 +56,7 @@ builder environment, then execute the build and test commands from the
 compat branch's `.github/workflows/pages.yml`. You may manually dispatch a
 build on the compat branch; it is prevented from uploading to GitHub Pages.
 
-`tools/ml_kernel/vendor_pyodide.py` hosts the old `pyodide.js`,
+`tools/ml_kernel/vendor_pyodide.py` hosts the legacy `pyodide.mjs` ESM Worker entry,
 `repodata.json`, WASM and the official scientific wheel dependency closure.
 Other optional packages retain a Pyodide **0.23.4** CDN fallback.
 
