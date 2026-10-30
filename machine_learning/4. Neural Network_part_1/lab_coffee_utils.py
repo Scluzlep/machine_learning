@@ -58,7 +58,7 @@ def plt_prob(ax,fwb):
     for i in range(tmp_x0.shape[0]):
         for j in range(tmp_x1.shape[1]):
             x = np.array([[tmp_x0[i,j],tmp_x1[i,j]]])
-            z[i,j] = fwb(x)
+            z[i,j] = np.asarray(fwb(x)).item()
 
 
     cmap = plt.get_cmap('Blues')
@@ -137,7 +137,7 @@ def plt_output_unit(W,b):
         for j in range(steps):
             for k in range(steps):
                 v = np.array([x[i,j,k],y[i,j,k],z[i,j,k]])
-                d[i,j,k] = tf.keras.activations.sigmoid(np.dot(v,W[:,0])+b).numpy()
+                d[i,j,k] = np.asarray(tf.keras.activations.sigmoid(np.dot(v,W[:,0])+b)).item()
     pcm = ax.scatter(x, y, z, c=d, cmap=cmap, alpha = 1 )
     ax.set_xlabel("unit 0"); 
     ax.set_ylabel("unit 1"); 
