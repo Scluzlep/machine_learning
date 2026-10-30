@@ -37,7 +37,8 @@ async def initialize_course_dependencies():
     import piplite
     from .imports_bootstrap import _register_ipympl_backends
 
-    await piplite.install(["ipywidgets==7.6.5", "ipympl==0.9.3", "seaborn==0.11.2"])
+    await piplite.install(["ipython==8.12.3", "ipywidgets==7.6.5",
+                           "ipympl==0.9.3", "seaborn==0.11.2"])
     _register_ipympl_backends()
     from .chinese_font import install as install_chinese_font
     await install_chinese_font()

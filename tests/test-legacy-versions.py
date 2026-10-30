@@ -38,6 +38,9 @@ def verify(dist: Path | None = None) -> None:
         assert piplite_index.is_file(), "Piplite addon missing: no wheel index"
         piplite = json.loads(piplite_index.read_text(encoding="utf-8"))
         assert "pyodide-kernel" in piplite, "Patched legacy kernel is absent from wheel index"
+        assert "ipython" in piplite and "8.12.3" in piplite["ipython"]["releases"], (
+            "IPython 8.12.3 must take priority over incompatible IPython 9.x"
+        )
         assert (dist / "pypi/pyodide_kernel-0.1.1-py3-none-any.whl").is_file()
         site = (dist / "jupyter-lite.json")
         assert site.is_file(), site

@@ -25,6 +25,7 @@ ipywidgets 7.6.5 and ipympl 0.9.3.
 | Matplotlib | 3.5.2 | classic IPython widget backend registration |
 | Pillow | 9.1.1 | WASM wheel downloaded on demand |
 | h5py | 3.7.0 | WASM wheel downloaded on demand |
+| IPython | 8.12.3 | pre-bundled in Piplite index; prevents upstream IPython 9 conflict |
 | ipywidgets | 7.6.5 | original widget Python API |
 | ipympl | 0.9.3 | original interactive Matplotlib API |
 | seaborn | 0.11.2 | compatible Python wheel bundled by build |
@@ -65,3 +66,8 @@ deployed code-cell sources are identical. The Python kernel tests check the
 old patched wheel and compatibility shims. Browser tests are still required
 to establish end-to-end Notebook execution: **static checks alone do not
 prove that all course exercises work in Chromium.**
+
+The legacy kernel bootstraps IPython before cell hooks run. To avoid a 2026
+micropip resolver conflict (`ipympl 0.9.3` requires `ipython<9` while
+unconstrained installs prefer 9.x), the local Piplite index also bundles
+`ipython==8.12.3`, and the cell hook checks the same pin.
