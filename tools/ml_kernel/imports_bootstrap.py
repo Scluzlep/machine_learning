@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Other packages, such as numpy/scipy/matplotlib, are handled by Pyodide's
 # native package loader when imported directly in a cell.
-_MANAGED = frozenset({"ipywidgets", "ipympl", "seaborn"})
+_MANAGED = frozenset({"ipywidgets", "ipympl", "seaborn", "h5py"})
 _MAX_MODULES = 48
 _MAX_BYTES = 1_000_000
 
@@ -136,6 +136,16 @@ def _installed(name: str) -> bool:
 async def install_missing(code: str):
     targets = discover(code)
     missing = sorted(p for p in targets if not _installed(p))
+    # h5py has a version-matched compiled Pyodide wheel hosted by the site.
+    # Use the Pyodide package index instead of resolving a non-WASM PyPI wheel.
+    if "h5py" in missing:
+        from pyodide_js import loadPackage
+        await loadPackage("h5py")
+        missing.remove("h5py")
+        if not _installed("h5py"):
+            raise ModuleNotFoundError(
+                "h5py Pyodide wheel loaded but Python cannot import it"
+            )
     if missing:
         # piplite is initialized by JupyterLite before the kernel starts.
         import piplite
