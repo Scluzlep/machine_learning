@@ -140,9 +140,9 @@ def _tensor(value):
     data = np.asarray(value, dtype=np.float32)
     if data.ndim == 1:
         data = data.reshape((-1, 1))
-    if data.ndim != 2:
-        raise ValueError("This adapter accepts 2D numerical arrays")
-    return _require_tf().tensor2d(to_js(data.tolist()))
+    if data.ndim not in (2, 3, 4):
+        raise ValueError("Layer inputs must have rank 2, 3, or 4")
+    return _require_tf().tensor(to_js(data.ravel()), to_js(list(data.shape)), "float32")
 
 
 class Dense:
@@ -223,10 +223,11 @@ class Sequential:
         self._model = None
         self._compile_options = None
         self._built_n_features = None
+        self._built_input_shape = None
         if not all(isinstance(layer, Dense) for layer in self._layers):
-            raise TypeError("This adapter supports Dense layers only")
+            raise TypeError("Supported layers: Dense, Conv2D, Flatten, Dropout, MaxPooling2D, BatchNormalization")
         if self._layers and self._layers[0].input_shape is not None:
-            self._build(self._layers[0].input_shape[0])
+            self._build(self._layers[0].input_shape)
 
     def add(self, layer):
         if self._model is not None:
@@ -239,24 +240,26 @@ class Sequential:
     def layers(self):
         return self._layers
 
-    def _build(self, n_features):
-        n_features = int(n_features)
+    def _build(self, input_shape):
+        shape = (int(input_shape),) if isinstance(input_shape, int) else tuple(input_shape)
+        if not shape or any(int(dim) <= 0 for dim in shape):
+            raise ValueError("Model input dimensions must be positive integers")
         if self._model is not None:
-            if n_features != self._built_n_features:
+            if shape != self._built_input_shape:
                 raise ValueError(
-                    f"Input features changed from {self._built_n_features} to {n_features}"
+                    f"Input shape changed from {self._built_input_shape} to {shape}"
                 )
             return
         if not self._layers:
             raise ValueError("Sequential model has no layers")
         self._model = self._tf.sequential(_config(name=self._name))
-        prev_units = n_features
         for i, layer in enumerate(self._layers):
-            self._model.add(layer._js_layer((n_features,) if i == 0 else None))
-            layer._input_shape = (None, prev_units)
-            layer._output_shape = (None, layer.units)
-            prev_units = layer.units
-        self._built_n_features = n_features
+            js_layer = layer._js_layer(shape if i == 0 else None)
+            self._model.add(js_layer)
+            layer._input_shape = tuple(js_layer.inputShape.to_py())
+            layer._output_shape = tuple(js_layer.outputShape.to_py())
+        self._built_input_shape = shape
+        self._built_n_features = shape[0] if len(shape) == 1 else shape
         if self._compile_options is not None:
             self._model.compile(self._compile_options)
 
@@ -277,9 +280,9 @@ class Sequential:
     async def fit(self, X, y, *, epochs=10, batch_size=32, verbose=0,
                   shuffle=True):
         data = np.asarray(X, dtype=np.float32)
-        if data.ndim != 2:
-            raise ValueError("model.fit expects a matrix of shape (rows, features)")
-        self._build(data.shape[1])
+        if data.ndim not in (2, 3, 4):
+            raise ValueError("model.fit expects rank 2 to 4 input data")
+        self._build(data.shape[1:])
         if self._compile_options is None:
             raise ValueError("Compile the model before calling fit")
         xjs = _tensor(data)
@@ -297,9 +300,9 @@ class Sequential:
 
     def predict(self, X, **kwargs):
         data = np.asarray(X, dtype=np.float32)
-        if data.ndim != 2:
-            raise ValueError("model.predict expects a 2D feature matrix")
-        self._build(data.shape[1])
+        if data.ndim not in (2, 3, 4):
+            raise ValueError("model.predict expects rank 2 to 4 input data")
+        self._build(data.shape[1:])
         xjs = _tensor(data)
         try:
             pred = self._model.predict(xjs)
@@ -312,9 +315,9 @@ class Sequential:
 
     async def predict_async(self, X):
         data = np.asarray(X, dtype=np.float32)
-        if data.ndim != 2:
-            raise ValueError("model.predict expects a 2D feature matrix")
-        self._build(data.shape[1])
+        if data.ndim not in (2, 3, 4):
+            raise ValueError("model.predict expects rank 2 to 4 input data")
+        self._build(data.shape[1:])
         xjs = _tensor(data)
         try:
             pred = self._model.predict(xjs)

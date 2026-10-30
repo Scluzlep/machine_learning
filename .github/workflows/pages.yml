@@ -140,6 +140,7 @@ jobs:
           cp machine_learning/browser_ml/tfjs_bridge.py dist/vendor/tfjs_bridge.py
           cp machine_learning/browser_ml/tfjs_compat.py dist/vendor/tfjs_compat.py
           cp machine_learning/browser_ml/tfjs_tensor.py dist/vendor/tfjs_tensor.py
+          cp machine_learning/browser_ml/tfjs_layers.py dist/vendor/tfjs_layers.py
           node tests/browser-smoke.cjs
           node tests/repl-zero-edit.cjs
           node tests/notebook-ui.cjs

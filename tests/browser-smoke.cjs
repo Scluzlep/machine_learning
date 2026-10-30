@@ -41,6 +41,8 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
             py.FS.writeFile('/home/pyodide/browser_ml/tfjs_compat.py', compatText);
             const tensorText = await (await fetch(data.tensor)).text();
             py.FS.writeFile('/home/pyodide/browser_ml/tfjs_tensor.py', tensorText);
+            const layersText = await (await fetch(data.layers)).text();
+            py.FS.writeFile('/home/pyodide/browser_ml/tfjs_layers.py', layersText);
             const output = await py.runPythonAsync(
                 "import numpy as np, scipy, pandas, matplotlib, sklearn\\n"
               + "from sklearn.linear_model import LinearRegression\\n"
@@ -146,6 +148,26 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
               + "g=grad(lambda t: tf.reduce_sum(t*t))(tf.constant([1.,2.,3.]))\\n"
               + "np.testing.assert_allclose(g.numpy(),[2,4,6])\\n"
             );
+            await py.runPythonAsync(
+                "import numpy as np\\n"
+              + "import tensorflow as tf\\n"
+              + "from tensorflow.keras.models import Sequential\\n"
+              + "from tensorflow.keras.layers import Dense,Conv2D,MaxPooling2D,Flatten,Dropout,BatchNormalization\\n"
+              + "cnn=Sequential([Conv2D(2,3,activation='relu',input_shape=(8,8,1)),MaxPooling2D(2),Flatten(),Dropout(0.1),Dense(2,activation='softmax')])\\n"
+              + "cnn.compile(loss=tf.keras.losses.CategoricalCrossentropy(),optimizer=tf.keras.optimizers.Adam(0.005))\\n"
+              + "images=np.arange(8*8*8,dtype='float32').reshape((8,8,8,1))/512\\n"
+              + "labels=np.eye(2,dtype='float32')[[0,1,0,1,0,1,0,1]]\\n"
+              + "hist=await cnn.fit(images,labels,epochs=2,batch_size=4)\\n"
+              + "assert len(hist.history['loss'])==2\\n"
+              + "assert cnn.predict(images).shape==(8,2)\\n"
+              + "assert len(cnn.layers[0].get_weights())==2\\n"
+              + "cnn.dispose()\\n"
+              + "bn=Sequential([Dense(4,input_shape=(2,)),BatchNormalization(),Dense(1)])\\n"
+              + "bn.compile(loss=tf.keras.losses.MeanSquaredError())\\n"
+              + "bh=await bn.fit(np.ones((8,2),dtype='float32'),np.ones((8,1),dtype='float32'),epochs=1)\\n"
+              + "assert len(bh.history['loss'])==1\\n"
+              + "bn.dispose()\\n"
+            );
             self.postMessage({ok:true,backend:output});
           } catch (err) {self.postMessage({ok:false,error:String(err),stack:err.stack})}
         }`;
@@ -155,7 +177,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
         const timer=setTimeout(()=>{worker.terminate();reject(Error('Pyodide/TF.js smoke test timed out'));},150000);
         worker.onmessage=e=>{clearTimeout(timer);worker.terminate();URL.revokeObjectURL(blob);resolve(e.data)};
         worker.onerror=e=>{clearTimeout(timer);worker.terminate();reject(Error(e.message||'Worker error'))};
-        worker.postMessage({pyodide:`http://127.0.0.1:${port}/pyodide/pyodide.mjs`,pyodideBase:`http://127.0.0.1:${port}/pyodide/`,bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,compat:`http://127.0.0.1:${port}/vendor/tfjs_compat.py`,tensor:`http://127.0.0.1:${port}/vendor/tfjs_tensor.py`,losses:`http://127.0.0.1:${port}/vendor/course-losses.js`,tfjs:src});
+        worker.postMessage({pyodide:`http://127.0.0.1:${port}/pyodide/pyodide.mjs`,pyodideBase:`http://127.0.0.1:${port}/pyodide/`,bridge:`http://127.0.0.1:${port}/vendor/tfjs_bridge.py`,compat:`http://127.0.0.1:${port}/vendor/tfjs_compat.py`,tensor:`http://127.0.0.1:${port}/vendor/tfjs_tensor.py`,layers:`http://127.0.0.1:${port}/vendor/tfjs_layers.py`,losses:`http://127.0.0.1:${port}/vendor/course-losses.js`,tfjs:src});
       });
     },port);
     console.log('Browser scientific/TensorFlow.js backend test:', JSON.stringify(outcome));

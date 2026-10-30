@@ -13,6 +13,7 @@ import numpy as np
 from js import globalThis
 from . import tfjs_bridge as bridge
 from . import tfjs_tensor as eager
+from . import tfjs_layers as extra_layers
 
 
 class _Tensor:
@@ -254,10 +255,10 @@ class Sequential:
 
     @property
     def input(self):
-        width = self._model._built_n_features
-        if width is None:
+        shape = self._model._built_input_shape
+        if shape is None:
             raise ValueError("Build model before inspecting model.input")
-        return _SymbolicTensor((None, width))
+        return _SymbolicTensor((None, *shape))
 
     def get_layer(self, name=None, index=None):
         layers = self.layers
@@ -362,7 +363,10 @@ async def install(backend="auto"):
         await bridge._load_script(bridge._asset_url("course-losses.js"))
     layers = _module("tensorflow.keras.layers",
                      Dense=Dense, Input=Input, Normalization=Normalization,
-                     LeakyReLU=LeakyReLU)
+                     LeakyReLU=LeakyReLU,
+                     Conv2D=extra_layers.Conv2D, MaxPooling2D=extra_layers.MaxPooling2D,
+                     Flatten=extra_layers.Flatten, Dropout=extra_layers.Dropout,
+                     BatchNormalization=extra_layers.BatchNormalization)
     activations = _module(
         "tensorflow.keras.activations",
         sigmoid=_sigmoid, relu=_relu,
