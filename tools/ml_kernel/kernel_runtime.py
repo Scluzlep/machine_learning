@@ -28,6 +28,12 @@ async def initialize_course_dependencies():
     await loadPackage(["numpy", "scipy", "pandas", "matplotlib", "scikit-learn", "micropip"])
     from .legacy_numpy import install as install_numpy
     install_numpy()
+    # Local course helpers import sklearn estimators internally; patch those
+    # symbols before the modules execute, not only when the cell imports them.
+    from .legacy_scikit import install_boston, install_linear_regression, install_ridge
+    install_boston()
+    install_linear_regression()
+    install_ridge()
     import piplite
     from .imports_bootstrap import _register_ipympl_backends
 
