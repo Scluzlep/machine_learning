@@ -28,7 +28,7 @@ const server = spawn('python', ['-m','http.server',String(port),'--bind','127.0.
             py.FS.writeFile('/home/pyodide/browser_ml/tfjs_bridge.py', script);
             const compatText = await (await fetch(data.compat)).text();
             py.FS.writeFile('/home/pyodide/browser_ml/tfjs_compat.py', compatText);
-            globalThis.importScripts(data.losses);
+            globalThis.eval(await (await fetch(data.losses)).text());
             const output = await py.runPythonAsync(
                 "import numpy as np, scipy, pandas, matplotlib, sklearn\\n"
               + "from sklearn.linear_model import LinearRegression\\n"
