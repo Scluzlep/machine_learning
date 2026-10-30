@@ -36,6 +36,7 @@ def build(wheel: Path, root: Path, destination: Path) -> Path:
         raise RuntimeError("Not a pyodide-kernel wheel")
     files[kernel_path] = transform_kernel(files[kernel_path])
     files["pyodide_kernel/kernel_runtime.py"] = (root / "tools/ml_kernel/kernel_runtime.py").read_bytes()
+    files["pyodide_kernel/imports_bootstrap.py"] = (root / "tools/ml_kernel/imports_bootstrap.py").read_bytes()
     files["pyodide_kernel/auto_tfjs/__init__.py"] = b""
     for name in ("tfjs_bridge.py", "tfjs_compat.py"):
         files["pyodide_kernel/auto_tfjs/" + name] = (
