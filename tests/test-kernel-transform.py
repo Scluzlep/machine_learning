@@ -28,7 +28,7 @@ data = original.read_bytes()
 object_id = hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
 assert object_id == "c5fbceb7612f7aef47e23cff40d137916823156e", object_id
 
-wheel = root / ".ml-wheel/pyodide_kernel-0.8.3-py3-none-any.whl"
+wheel = root / ".ml-wheel/pyodide_kernel-0.8.6-py3-none-any.whl"
 with zipfile.ZipFile(wheel) as archive:
     assert archive.testzip() is None
     kernel = archive.read("pyodide_kernel/kernel.py").decode()
