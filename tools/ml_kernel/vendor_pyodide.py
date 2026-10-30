@@ -1,86 +1,60 @@
 #!/usr/bin/env python3
-"""Ship the Pyodide 314 runtime on the site's own origin.
+"""Serve Pyodide 0.23.4 and its own WASM wheels from JupyterLite's origin.
 
-The npm package contains the WebAssembly runtime and standard library, but not
-the large scientific Python wheels. Those retain the version-matched CDN
-fallback until the site's separately cached wheel index is built.
+Older Pyodide uses pyodide.js and repodata.json, not the modern Pyodide 314
+pyodide.mjs/pyodide-lock.json. Mixed binary wheels cannot load.
 """
 from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
-import time
-from urllib.request import urlopen
-from urllib.parse import urljoin, urlparse
 import json
 from pathlib import Path
 import shutil
+import time
+from urllib.parse import urljoin, urlparse
+from urllib.request import urlopen
 
-CORE = (
-    "pyodide.mjs",
-    "pyodide.asm.mjs",
-    "pyodide.asm.wasm",
-    "python_stdlib.zip",
-    "pyodide-lock.json",
-)
-PYODIDE_VERSION = "314.0.6"
+PYODIDE_VERSION = "0.23.4"
 FALLBACK = f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
+CORE = ("pyodide.js", "pyodide.asm.js", "pyodide.asm.wasm",
+        "python_stdlib.zip", "repodata.json")
+COURSE_PACKAGES = ("numpy", "scipy", "pandas", "matplotlib",
+                   "scikit-learn", "micropip")
+ON_DEMAND_COURSE_PACKAGES = ("h5py", "Pillow")
 
-# Fixed machine-learning course dependencies. Pyodide loads these as part of
-# kernel initialization rather than stalling individual Notebook cells.
-COURSE_PACKAGES = (
-    "numpy",
-    "scipy",
-    "pandas",
-    "matplotlib",
-    "scikit-learn",
-    "micropip",
-)
 
-# Needed by the final HDF5 and image exercises; available from the local
-# Pyodide package lock but deliberately not preloaded at kernel startup.
-ON_DEMAND_COURSE_PACKAGES = ("h5py", "pillow")
-
+def _key(packages: dict, name: str) -> str:
+    canonical = name.lower().replace("_", "-").replace(".", "-")
+    for key in packages:
+        if key.lower().replace("_", "-").replace(".", "-") == canonical:
+            return key
+    raise KeyError(f"Pyodide {PYODIDE_VERSION} lacks package {name}")
 
 
 def _wheel_closure(packages: dict, roots: tuple[str, ...]) -> set[str]:
-    """All official Pyodide wheels needed for the preloaded scientific stack."""
-    selected = set()
+    chosen = set()
     todo = list(roots)
     while todo:
-        name = todo.pop()
-        if name in selected:
+        name = _key(packages, todo.pop())
+        if name in chosen:
             continue
-        selected.add(name)
-        item = packages.get(name)
-        if item:
-            todo.extend(item.get("depends") or [])
-    return {name for name in selected if name in packages}
+        chosen.add(name)
+        todo.extend(packages[name].get("depends") or [])
+    return chosen
 
 
-def _download_wheel(name: str, metadata: dict, dest: Path) -> int:
-    file_name = metadata.get("file_name")
-    if not file_name:
-        return 0
-    parsed = urlparse(file_name)
-    if parsed.scheme and parsed.scheme not in ("https",):
-        raise ValueError(f"Unsupported Pyodide wheel URL for {name}: {file_name}")
-    relative = not parsed.scheme
-    if relative and (Path(file_name).name != file_name or file_name.startswith(".")):
-        raise ValueError(f"Unsafe Pyodide wheel path: {file_name}")
-    url = file_name if not relative else urljoin(FALLBACK, file_name)
-    target = dest / Path(parsed.path).name
-    digest = metadata.get("sha256")
+def _download(url: str, target: Path, digest: str | None = None) -> int:
     if target.is_file() and (not digest or
-                             hashlib.sha256(target.read_bytes()).hexdigest() == digest):
+                            hashlib.sha256(target.read_bytes()).hexdigest() == digest):
         return target.stat().st_size
     for attempt in range(3):
         try:
             with urlopen(url, timeout=90) as response:
                 payload = response.read()
             if digest and hashlib.sha256(payload).hexdigest() != digest:
-                raise ValueError(f"Pyodide wheel checksum mismatch: {name}")
+                raise ValueError(f"SHA256 mismatch: {url}")
             temporary = target.with_suffix(target.suffix + ".part")
             temporary.write_bytes(payload)
             temporary.replace(target)
@@ -89,62 +63,61 @@ def _download_wheel(name: str, metadata: dict, dest: Path) -> int:
             if attempt == 2:
                 raise
             time.sleep(2 * (attempt + 1))
-    raise RuntimeError("Unreachable")
+    raise RuntimeError("unreachable")
 
 
-def _vendor_scientific_wheels(dest: Path, lock_file: Path):
-    """Serve scientific, HDF5 and imaging wheels locally; preserve other CDN URLs."""
-    lock = json.loads(lock_file.read_text(encoding="utf-8"))
-    packages = lock["packages"]
+def _vendor_scientific_wheels(dest: Path, repodata: Path) -> tuple[int, int]:
+    manifest = json.loads(repodata.read_text(encoding="utf-8"))
+    packages = manifest["packages"]
     roots = _wheel_closure(packages, COURSE_PACKAGES + ON_DEMAND_COURSE_PACKAGES)
-    missing = [n for n in COURSE_PACKAGES + ON_DEMAND_COURSE_PACKAGES if n not in packages]
-    if missing:
-        raise RuntimeError(f"Official Pyodide lock lacks requested packages: {missing}")
-    wanted = [(name, packages[name]) for name in sorted(roots)
-              if packages[name].get("file_name")]
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        sizes = list(pool.map(lambda pair: _download_wheel(*pair, dest), wanted))
-    for name, item in packages.items():
-        original = item.get("file_name")
-        if not original:
+    wanted = []
+    for name in sorted(roots):
+        metadata = packages[name]
+        filename = metadata.get("file_name")
+        if not filename:
             continue
-        if name not in roots and not urlparse(original).scheme:
-            # Avoid 404 on an optional package that wasn't bundled.
-            item["file_name"] = urljoin(FALLBACK, original)
-    lock_file.write_text(json.dumps(lock, ensure_ascii=False, separators=(",", ":")) + "\n",
-                         encoding="utf-8")
-    print(f"Bundled {len(wanted)} official Pyodide scientific wheels "
-          f"({sum(sizes)/1024**2:.1f} MiB); other packages keep CDN fallback")
+        parsed = urlparse(filename)
+        if parsed.scheme not in ("", "https"):
+            raise ValueError(f"Unsupported wheel URL: {filename}")
+        if not parsed.scheme and (Path(filename).name != filename or filename.startswith(".")):
+            raise ValueError(f"Unsafe wheel filename: {filename}")
+        url = filename if parsed.scheme else urljoin(FALLBACK, filename)
+        wanted.append((url, dest / Path(parsed.path).name, metadata.get("sha256")))
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        sizes = list(pool.map(lambda entry: _download(*entry), wanted))
+    # Keep other official packages accessible from their matching-version CDN.
+    for name, metadata in packages.items():
+        filename = metadata.get("file_name")
+        if name not in roots and filename and not urlparse(filename).scheme:
+            metadata["file_name"] = urljoin(FALLBACK, filename)
+    repodata.write_text(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")) + "\n",
+                        encoding="utf-8")
+    return len(wanted), sum(sizes)
 
 
 def vendor(dist: Path, npm_package: Path, base_path: str) -> None:
     dest = dist / "pyodide"
     dest.mkdir(parents=True, exist_ok=True)
-    for file in CORE:
-        src = npm_package / file
-        if not src.is_file():
-            raise FileNotFoundError(f"Missing official Pyodide {PYODIDE_VERSION} asset: {src}")
-        shutil.copyfile(src, dest / file)
-
-    _vendor_scientific_wheels(dest, dest / "pyodide-lock.json")
-
-    settings_file = dist / "jupyter-lite.json"
-    data = json.loads(settings_file.read_text(encoding="utf-8"))
-    config = data.setdefault("jupyter-config-data", {})
-    plugins = config.setdefault("litePluginSettings", {})
-    kernel = plugins.setdefault("@jupyterlite/pyodide-kernel-extension:kernel", {})
-    kernel["pyodideUrl"] = f"{base_path.rstrip('/')}/pyodide/pyodide.mjs"
-    options = kernel.setdefault("loadPyodideOptions", {})
-    # Pyodide computes an absolute packageBaseUrl from the local pyodide.mjs
-    # and lockFileURL. A path-only URL here is invalid inside its Worker.
-    options.pop("packageBaseUrl", None)
-    options["packages"] = list(COURSE_PACKAGES)
-    settings_file.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print("Pyodide runtime hosted on", kernel["pyodideUrl"])
-    print("Pyodide scientific package source: local pyodide.mjs / lockfile base")
-    print("Scientific modules initialized with kernel:", ", ".join(COURSE_PACKAGES))
-    print("Local runtime size (MiB):",
-          round(sum((dest / name).stat().st_size for name in CORE) / 1024**2, 1))
+    for filename in CORE:
+        source = npm_package / filename
+        target = dest / filename
+        if source.is_file():
+            shutil.copyfile(source, target)
+        else:
+            _download(urljoin(FALLBACK, filename), target)
+    count, size = _vendor_scientific_wheels(dest, dest / "repodata.json")
+    config_file = dist / "jupyter-lite.json"
+    config = json.loads(config_file.read_text(encoding="utf-8"))
+    settings = config.setdefault("jupyter-config-data", {}).setdefault("litePluginSettings", {})
+    kernel = settings.setdefault("@jupyterlite/pyodide-kernel-extension:kernel", {})
+    kernel["pyodideUrl"] = f"{base_path.rstrip('/')}/pyodide/pyodide.js"
+    # Older workers have no loadPyodideOptions support. Package preloading
+    # takes place before the first cell in kernel_runtime.py.
+    kernel.pop("loadPyodideOptions", None)
+    config_file.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+                           encoding="utf-8")
+    print(f"Local Pyodide {PYODIDE_VERSION}: {kernel['pyodideUrl']}")
+    print(f"Scientific wheels: {count} files, {size / 1024**2:.1f} MiB")
 
 
 if __name__ == "__main__":

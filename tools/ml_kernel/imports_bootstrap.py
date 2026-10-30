@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Other packages, such as numpy/scipy/matplotlib, are handled by Pyodide's
 # native package loader when imported directly in a cell.
-_MANAGED = frozenset({"ipywidgets", "ipympl", "seaborn"})
+_MANAGED = frozenset({"ipywidgets", "ipympl", "seaborn", "h5py"})
 _MAX_MODULES = 48
 _MAX_BYTES = 1_000_000
 
@@ -80,17 +80,19 @@ def _uses_widget_backend(code: str) -> bool:
 
 
 def _register_ipympl_backends() -> None:
-    """Refresh aliases when Matplotlib cached entry points before ipympl install.
-
-    ipympl provides both 'widget' and 'ipympl' Matplotlib backend aliases.
-    Register them directly to avoid Matplotlib's one-time entry point scan.
-    """
-    from matplotlib.backends import backend_registry
+    """Register the classic Matplotlib 3.5 widget backend aliases."""
     import ipympl.backend_nbagg
-    for name in ("widget", "ipympl"):
-        backend_registry._name_to_module[name] = "module://ipympl.backend_nbagg"
-        backend_registry._backend_to_gui_framework.setdefault(name, "unknown")
-    backend_registry.resolve_backend("widget")
+    try:
+        from matplotlib.backends import backend_registry
+    except ImportError:
+        from IPython.core import pylabtools
+        for name in ("widget", "ipympl"):
+            pylabtools.backends[name] = "module://ipympl.backend_nbagg"
+    else:
+        for name in ("widget", "ipympl"):
+            backend_registry._name_to_module[name] = "module://ipympl.backend_nbagg"
+            backend_registry._backend_to_gui_framework.setdefault(name, "unknown")
+        backend_registry.resolve_backend("widget")
 
 
 def discover(code: str, directory: Path | None = None) -> set[str]:
@@ -136,6 +138,12 @@ def _installed(name: str) -> bool:
 async def install_missing(code: str):
     targets = discover(code)
     missing = sorted(p for p in targets if not _installed(p))
+    if "h5py" in missing:
+        from pyodide_js import loadPackage
+        await loadPackage("h5py")
+        missing.remove("h5py")
+        if not _installed("h5py"):
+            raise ModuleNotFoundError("h5py version-matched Pyodide wheel failed to import")
     if missing:
         # piplite is initialized by JupyterLite before the kernel starts.
         import piplite

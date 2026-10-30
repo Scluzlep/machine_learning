@@ -38,6 +38,7 @@ def install_boston():
 
 
 def install_linear_regression():
+    import inspect
     import sklearn.linear_model as linear
     Original = linear.LinearRegression
     if getattr(Original, "_ml_legacy_normalize", False):
@@ -55,8 +56,12 @@ def install_linear_regression():
                     "normalize=True is not supported; use a preprocessing scaler"
                 )
             self.normalize = normalize
-            super().__init__(fit_intercept=fit_intercept, copy_X=copy_X,
-                             tol=tol, n_jobs=n_jobs, positive=positive)
+            self.tol = tol
+            kwargs = dict(fit_intercept=fit_intercept, copy_X=copy_X,
+                          n_jobs=n_jobs, positive=positive)
+            if "tol" in inspect.signature(Original.__init__).parameters:
+                kwargs["tol"] = tol
+            super().__init__(**kwargs)
 
     LinearRegression.__name__ = "LinearRegression"
     LinearRegression.__qualname__ = "LinearRegression"

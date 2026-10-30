@@ -17,17 +17,21 @@ _COURSE_DEPENDENCIES_READY = False
 async def initialize_course_dependencies():
     """Load the course's Python UI packages once per kernel, not per cell.
 
-    Large compiled scientific packages are preloaded by Pyodide load options.
-    ipympl and ipywidgets are pure-Python wheels loaded from JupyterLite's
-    package index.  The Notebook source is left untouched.
+    Older JupyterLite 0.1 does not preload scientific wheels via load options.
+    Load the Pyodide 0.23.4 scientific stack here before the first cell.
+    The Notebook source is left untouched.
     """
     global _COURSE_DEPENDENCIES_READY
     if _COURSE_DEPENDENCIES_READY:
         return
+    from pyodide_js import loadPackage
+    await loadPackage(["numpy", "scipy", "pandas", "matplotlib", "scikit-learn", "micropip"])
+    from .legacy_numpy import install as install_numpy
+    install_numpy()
     import piplite
     from .imports_bootstrap import _register_ipympl_backends
 
-    await piplite.install(["ipywidgets", "ipympl", "seaborn"])
+    await piplite.install(["ipywidgets==7.6.5", "ipympl==0.9.3", "seaborn==0.11.2"])
     _register_ipympl_backends()
     from .chinese_font import install as install_chinese_font
     await install_chinese_font()
@@ -138,6 +142,11 @@ async def prepare_cell(code: str) -> str:
         await loadPackagesFromImports("import sklearn")
         from .legacy_scikit import install_linear_regression
         install_linear_regression()
+    if "scipy.misc" in code and re.search(r"\\b(?:imread|imresize|imsave)\\b", code):
+        from pyodide_js import loadPackage
+        await loadPackage(["scipy", "Pillow"])
+        from .legacy_scipy import install as install_scipy
+        install_scipy()
     if "tensorflow" not in sys.modules:
         return code
     return transform_tf_fit(code)
