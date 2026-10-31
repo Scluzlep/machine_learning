@@ -48,6 +48,7 @@ const server = spawn('python', ['-m', 'http.server', String(port), '--bind', '12
       'ridge.fit([[1,2],[2,3],[3,5],[4,6]], [2,3,4,5])',
       'assert len(ridge.predict([[5,7]])) == 1',
       'print("ML_LEGACY_RIDGE_OK")',
+      'import numpy as np',
       'from sklearn.linear_model import LinearRegression',
       'plain = LinearRegression(normalize=False)',
       'oldnorm = LinearRegression(normalize=True)',
