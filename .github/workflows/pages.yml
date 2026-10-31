@@ -91,7 +91,9 @@ jobs:
       - name: Fix JupyterLite 0.1.1 Webpack Worker import
         run: |
           python tests/test-legacy-worker-patch.py
+          python tests/test-ipympl-canvas-patch.py
           python tools/ml_kernel/patch_legacy_worker.py --dist dist
+          python tools/ml_kernel/patch_ipympl_canvas.py --dist dist
       - name: Self-host Pyodide WebAssembly and standard library
         run: |
           npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@0.23.4
@@ -127,7 +129,7 @@ jobs:
           assert (output/'vendor/tf.min.js').stat().st_size > 100000
           assert (output/'pyodide/pyodide.asm.wasm').stat().st_size > 5000000
           lock=json.loads((output/'pyodide/repodata.json').read_text())['packages']
-          for extra in ('h5py', 'pillow'):
+          for extra in ('h5py', 'pillow', 'sqlite3'):
               filename=lock[extra]['file_name']
               assert '://' not in filename, f'{extra} must be self-hosted'
               assert (output/'pyodide'/filename).is_file(), f'Missing {extra} wheel'
@@ -157,6 +159,8 @@ jobs:
           node tests/repl-zero-edit.cjs
           node tests/notebook-ui.cjs
           node tests/notebook-imports.cjs
+          node tests/repl-sqlite.cjs
+          node tests/repl-widget-interaction.cjs
           node tests/repl-widget.cjs
       # Manual builds of compat must not overwrite the main Pages site.
       - name: Configure Pages
