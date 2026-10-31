@@ -25,7 +25,7 @@ CORE = (
     "pyodide-lock.json",
 )
 PYODIDE_VERSION = "314.0.6"
-FALLBACK = f"https://cdn.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
+FALLBACK = f"https://fastly.jsdelivr.net/pyodide/v{PYODIDE_VERSION}/full/"
 
 # Fixed machine-learning course dependencies. Pyodide loads these as part of
 # kernel initialization rather than stalling individual Notebook cells.
