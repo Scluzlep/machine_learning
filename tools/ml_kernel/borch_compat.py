@@ -108,8 +108,10 @@ def install_aliases(backend: types.ModuleType, backend_name: str) -> types.Modul
     allmods = {"torch": root}
     for short, parent, attr, package in specs:
         try:
-            target = getattr(parent, attr)
-        except (AttributeError, ImportError):
+            # Module-level __getattr__ on Borch can manufacture a callable for
+            # unknown names; require real exports for package namespaces.
+            target = vars(parent)[attr]
+        except (AttributeError, ImportError, KeyError, TypeError):
             continue
         allmods[f"torch.{short}"] = _proxy_module(f"torch.{short}", target, package=package)
 
