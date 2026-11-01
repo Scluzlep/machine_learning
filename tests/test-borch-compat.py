@@ -114,7 +114,8 @@ finally:
 
 class FakePiplite(types.ModuleType):
     install_calls = []
-    async def install(self, package):
+    async def install(self, package, deps=False):
+        assert deps is False
         self.install_calls.append(package)
 
 
@@ -129,12 +130,14 @@ async def test_cpu_fallback():
             return backend
         return orig_import(name)
     with patch.dict(sys.modules, {"piplite": fake_piplite}):
-        with patch.object(bridge.importlib, "import_module", side_effect=import_named):
+        with patch.object(bridge, "_wheel_url", return_value="/machine_learning/vendor/pyborch-1.14.1-py3-none-any.whl"), \
+             patch.object(bridge, "_gpu_supported", return_value=False), \
+             patch.object(bridge.importlib, "import_module", side_effect=import_named):
             with warnings.catch_warnings(record=True) as seen:
                 warnings.simplefilter("always")
                 installed = await bridge.ensure_torch()
                 assert installed.__borch_backend__ == "numpy"
-                assert fake_piplite.install_calls == ["pyborch==1.14.1"]
+                assert fake_piplite.install_calls == ["/machine_learning/vendor/pyborch-1.14.1-py3-none-any.whl"]
                 assert any("NumPy CPU" in str(x.message) for x in seen)
     for k in list(sys.modules):
         if k == "torch" or k.startswith("torch."):
