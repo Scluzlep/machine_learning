@@ -2,7 +2,7 @@ name: Deploy JupyterLite
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/borch-torch-bridge]
     paths:
       - 'machine_learning/**'
       - 'site-requirements.txt'
