@@ -53,6 +53,7 @@ jobs:
           python tests/test-notebook-integrity.py
           python tests/test-kernel-transform.py
           python tests/test-imports-bootstrap.py
+          python tests/test-torch-compat.py
           python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
           python tests/test-notebook-integrity.py --staged .ml-contents
           python - <<'PY'
@@ -102,6 +103,8 @@ jobs:
           test -s dist/vendor/tf.min.js
           test -s dist/vendor/tf-backend-webgpu.min.js
           test -s dist/vendor/course-losses.js
+      - name: Bundle experimental PyTorch/WebGPU compatibility assets
+        run: python tools/ml_kernel/vendor_torch.py --output dist/vendor/torch
       - name: Verify notebook syntax and static resources
         run: |
           python -m compileall -q machine_learning/browser_ml
@@ -124,6 +127,9 @@ jobs:
           assert opts['pyodideUrl']=='/machine_learning/pyodide/pyodide.mjs'
           assert (output/'vendor/tf-backend-webgpu.min.js').stat().st_size > 100000
           assert (output/'vendor/course-losses.js').stat().st_size > 500
+          assert (output/'vendor/torch/runtime.mjs').stat().st_size > 1000
+          assert (output/'vendor/torch/torch_pyodide-0.0.84-py3-none-any.whl').stat().st_size > 1000
+          assert (output/'vendor/torch/manifest.json').is_file()
           assert (output/'assets/fonts/SourceHanSansSC-Regular.otf').stat().st_size == 16529832
           assert 'SIL OPEN FONT LICENSE' in (output/'assets/fonts/OFL-LICENSE.txt').read_text()
           assert (output/'api/translations/zh_CN.json').exists()
