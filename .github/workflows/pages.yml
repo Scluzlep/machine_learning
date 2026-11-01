@@ -87,6 +87,11 @@ jobs:
         run: python tools/ml_kernel/vendor_borch.py --output .ml-wheel
       - name: Build static site
         run: jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel
+      - name: Self-host Borch wheel for the JupyterLite Worker
+        run: |
+          mkdir -p dist/vendor
+          cp .ml-wheel/pyborch-1.14.1-py3-none-any.whl dist/vendor/
+          test -s dist/vendor/pyborch-1.14.1-py3-none-any.whl
       - name: Self-host Pyodide WebAssembly and standard library
         run: |
           npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@314.0.6
@@ -135,6 +140,7 @@ jobs:
           assert any(output.rglob('ipywidgets-*.whl')), 'ipywidgets Python wheel is not bundled'
           assert any(output.rglob('seaborn-*.whl')), 'seaborn Python wheel is not bundled'
           assert any(output.rglob('pyborch-1.14.1-py3-none-any.whl')), 'Pinned Borch wheel is not bundled'
+          assert (output/'vendor/pyborch-1.14.1-py3-none-any.whl').stat().st_size > 100000
           print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
           PY
       - name: Test scientific WASM packages and TensorFlow.js in Chromium
