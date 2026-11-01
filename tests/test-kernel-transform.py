@@ -45,6 +45,7 @@ with zipfile.ZipFile(wheel) as archive:
     assert "code = await _prepare_ml_cell(code)" in kernel
     assert "pyodide_kernel/auto_tfjs/tfjs_bridge.py" in archive.namelist()
     assert "pyodide_kernel/kernel_runtime.py" in archive.namelist()
+    assert "pyodide_kernel/torch_runtime.py" in archive.namelist()
     assert "pyodide_kernel/legacy_scikit.py" in archive.namelist()
     assert "pyodide_kernel/legacy_data/boston_house_prices.csv" in archive.namelist()
     assert archive.read("pyodide_kernel/legacy_data/boston_house_prices.csv").startswith(b"506,13")
