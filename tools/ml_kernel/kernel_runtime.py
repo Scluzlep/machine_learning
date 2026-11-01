@@ -118,6 +118,9 @@ async def prepare_cell(code: str) -> str:
     # executing the original unchanged course cell.
     from .imports_bootstrap import install_missing
     await install_missing(code)
+    # Experimental PyTorch compatibility is lazy; existing course cells are unchanged.
+    from .torch_runtime import prepare_torch
+    await prepare_torch(code)
     if (re.search(r"(?:^|\n)\s*(?:import tensorflow|from tensorflow\b)", code)
             and "tensorflow" not in sys.modules):
         # The kernel's regular dependency loader runs after this hook.
