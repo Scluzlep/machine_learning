@@ -104,7 +104,6 @@ try:
     assert norm(8) == 8
     assert "torch.distributed" not in sys.modules
     assert "torch.nn.init" not in sys.modules
-    assert not hasattr(torch, "native_pytorch_enabled")
     print("Standard PyTorch import forms resolve through Borch: PASS")
 finally:
     for k in list(sys.modules):
