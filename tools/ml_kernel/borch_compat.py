@@ -16,6 +16,7 @@ import warnings
 
 BORCH_VERSION = "1.14.1"
 PYBORCH_DISTRIBUTION = f"pyborch=={BORCH_VERSION}"
+PYBORCH_WHEEL = f"pyborch-{BORCH_VERSION}-py3-none-any.whl"
 _COMPAT_MARKER = "__borch_compat__"
 _ALREADY_READY = False
 
@@ -143,6 +144,29 @@ def install_aliases(backend: types.ModuleType, backend_name: str) -> types.Modul
     return root
 
 
+def _wheel_url() -> str:
+    """Wheel comes from this Pages origin, not PyPI or an external CDN."""
+    from js import location
+    parts = str(location.pathname).split("/")
+    if len(parts) < 2 or parts[1] not in ("machine_learning", "machine_learning-legacy"):
+        raise RuntimeError("Cannot determine local JupyterLite site base for Borch wheel")
+    return f"/{parts[1]}/vendor/{PYBORCH_WHEEL}"
+
+
+def _gpu_supported() -> bool:
+    """Probe before import: old Pyodide lacks JSPI even if WebGPU is present."""
+    try:
+        from js import WebAssembly, navigator
+        from pyodide.ffi import run_sync
+        if not callable(run_sync):
+            return False
+        if getattr(WebAssembly, "Suspending", None) is None:
+            return False
+        return getattr(navigator, "gpu", None) is not None
+    except (ImportError, AttributeError, TypeError):
+        return False
+
+
 def _missing_gpu_or_jspi(exc: ImportError) -> bool:
     message = str(exc).lower()
     return any(
@@ -168,14 +192,21 @@ async def ensure_torch() -> types.ModuleType:
     import piplite
 
     # The package is bundled into the site's piplite index at build time.
-    await piplite.install(PYBORCH_DISTRIBUTION)
+    await piplite.install(_wheel_url(), deps=False)
 
-    try:
-        backend = importlib.import_module("borch_webgpu")
-        name = "webgpu"
-    except ImportError as exc:
-        if not _missing_gpu_or_jspi(exc):
-            raise
+    gpu_possible = _gpu_supported()
+    gpu_error = None
+    if gpu_possible:
+        try:
+            backend = importlib.import_module("borch_webgpu")
+            name = "webgpu"
+        except ImportError as exc:
+            if not _missing_gpu_or_jspi(exc):
+                raise
+            gpu_error = str(exc)
+    else:
+        gpu_error = "WebGPU or JavaScript Promise Integration (JSPI) not available"
+    if gpu_error is not None:
         # This is an explicit *kernel-wide* CPU fallback, never an automatic
         # mid-training migration. It does not claim feature parity with the GPU.
         backend = importlib.import_module("borch")
@@ -183,7 +214,7 @@ async def ensure_torch() -> types.ModuleType:
         warnings.warn(
             "Borch WebGPU/JSPI unavailable: torch compatibility is running on "
             "the NumPy CPU backend. Check torch.__borch_backend__. "
-            f"GPU import error: {exc}",
+            f"GPU initialization: {gpu_error}",
             RuntimeWarning,
             stacklevel=2,
         )
