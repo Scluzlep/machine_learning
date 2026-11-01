@@ -53,6 +53,7 @@ jobs:
           python tests/test-notebook-integrity.py
           python tests/test-kernel-transform.py
           python tests/test-imports-bootstrap.py
+          python tests/test-borch-compat.py
           python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
           python tests/test-notebook-integrity.py --staged .ml-contents
           python - <<'PY'
@@ -82,6 +83,8 @@ jobs:
           )
           print('Bundled course widget wheels:', sorted(x.name for x in wheel_dir.glob('*.whl')))
           PY
+      - name: Vendor Borch PyTorch-compatibility wheel
+        run: python tools/ml_kernel/vendor_borch.py --output .ml-wheel
       - name: Build static site
         run: jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel
       - name: Self-host Pyodide WebAssembly and standard library
@@ -131,6 +134,7 @@ jobs:
           assert any(output.rglob('ipympl-*.whl')), 'ipympl Python wheel is not bundled'
           assert any(output.rglob('ipywidgets-*.whl')), 'ipywidgets Python wheel is not bundled'
           assert any(output.rglob('seaborn-*.whl')), 'seaborn Python wheel is not bundled'
+          assert any(output.rglob('pyborch-1.14.1-py3-none-any.whl')), 'Pinned Borch wheel is not bundled'
           print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
           PY
       - name: Test scientific WASM packages and TensorFlow.js in Chromium
