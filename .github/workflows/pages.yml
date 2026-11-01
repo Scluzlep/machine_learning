@@ -2,7 +2,7 @@ name: Deploy JupyterLite
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/borch-torch-bridge]
     paths:
       - 'machine_learning/**'
       - 'site-requirements.txt'
@@ -19,14 +19,14 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages-kernel-recovery
+  group: pages-kernel-recovery-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
-      name: github-pages
+      name: ${{ github.ref == 'refs/heads/main' && 'github-pages' || 'compat-validation' }}
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
@@ -53,6 +53,7 @@ jobs:
           python tests/test-notebook-integrity.py
           python tests/test-kernel-transform.py
           python tests/test-imports-bootstrap.py
+          python tests/test-borch-compat.py
           python tools/ml_kernel/stage_notebooks.py --site-base /machine_learning
           python tests/test-notebook-integrity.py --staged .ml-contents
           python - <<'PY'
@@ -82,8 +83,15 @@ jobs:
           )
           print('Bundled course widget wheels:', sorted(x.name for x in wheel_dir.glob('*.whl')))
           PY
+      - name: Vendor Borch PyTorch-compatibility wheel
+        run: python tools/ml_kernel/vendor_borch.py --output .ml-wheel
       - name: Build static site
         run: jupyter lite build --contents .ml-contents --output-dir dist --piplite-wheels .ml-wheel
+      - name: Self-host Borch wheel for the JupyterLite Worker
+        run: |
+          mkdir -p dist/vendor
+          cp .ml-wheel/pyborch-1.14.1-py3-none-any.whl dist/vendor/
+          test -s dist/vendor/pyborch-1.14.1-py3-none-any.whl
       - name: Self-host Pyodide WebAssembly and standard library
         run: |
           npm install --prefix .pyodide-vendor --no-save --ignore-scripts --no-audit --no-fund pyodide@314.0.6
@@ -131,6 +139,8 @@ jobs:
           assert any(output.rglob('ipympl-*.whl')), 'ipympl Python wheel is not bundled'
           assert any(output.rglob('ipywidgets-*.whl')), 'ipywidgets Python wheel is not bundled'
           assert any(output.rglob('seaborn-*.whl')), 'seaborn Python wheel is not bundled'
+          assert any(output.rglob('pyborch-1.14.1-py3-none-any.whl')), 'Pinned Borch wheel is not bundled'
+          assert (output/'vendor/pyborch-1.14.1-py3-none-any.whl').stat().st_size > 100000
           print('Validated',len(files),'notebooks, TF.js bundle and Chinese translation')
           PY
       - name: Test scientific WASM packages and TensorFlow.js in Chromium
@@ -143,15 +153,19 @@ jobs:
           cp machine_learning/browser_ml/tfjs_layers.py dist/vendor/tfjs_layers.py
           node tests/browser-smoke.cjs
           node tests/repl-zero-edit.cjs
+          node tests/repl-torch.cjs
           node tests/notebook-ui.cjs
           node tests/notebook-imports.cjs
           node tests/repl-widget.cjs
       - name: Configure Pages
+        if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
       - name: Upload artifact
+        if: github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v4
         with:
           path: dist
       - name: Deploy Pages
+        if: github.ref == 'refs/heads/main'
         id: deployment
         uses: actions/deploy-pages@v4

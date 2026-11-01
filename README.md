@@ -42,6 +42,48 @@ python -m http.server 8000 --directory dist
 
 执行层自动处理 TensorFlow.js 的异步训练；教材仍使用标准 Python 写法。仓库的 GitHub Actions 会使用 Chromium 运行 Pyodide、科学计算包、原样 Keras 语句以及 Notebook 内核检测。
 
+## 可选的 PyTorch 兼容模式：Borch（实验性）
+
+站点使用 [Borch](https://github.com/playidea-lab/borch) `pyborch==1.14.1`，
+为传统教材提供 `import torch` 形式的**部分** PyTorch API；
+这不是 PyTorch 官方实现，也不支持 CUDA、分布式训练等全部功能。
+
+在 JupyterLite 的 Python Notebook 中直接执行：
+
+```python
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+
+print(torch.__borch_backend__)  # webgpu 或 numpy
+x = torch.tensor([1., 2., 3.], requires_grad=True)
+(x * x).sum().backward()
+print(x.grad)
+```
+
+自定义内核仅在单元格显式导入 `torch` 时才加载已打包的
+`pyborch` wheel，原始教学 Notebook 不做修改。能够使用 WebGPU + JSPI
+时优先使用 `borch_webgpu`；否则回退到基于 NumPy/Pyodide/WASM
+的 `borch` CPU 计算实现，并给出显式警告。
+
+**旧电脑/Windows 7 注意：** Chrome/Chromium 120～130 默认没有 JSPI，
+因此通常会选择 CPU；CPU 不依赖 WebGPU，也不依赖 JSPI，
+但仍需要浏览器支持当前站点的 Pyodide/WASM 功能。
+Win7 + 第三方 Chromium 修改版（如部分夸克构建）未经验证。
+不保证 GPU 和 CPU 后端拥有完全相同的 API。核显只会影响 WebGPU 路径，
+CPU 模式主要取决于处理器、内存和浏览器 WebAssembly 实现。
+
+`torch.nn`、`torch.nn.functional`、`torch.optim`、
+`torch.optim.lr_scheduler`、`torch.utils.data` 等已做
+Python 模块导入桥接；不存在的上游 API 不会被伪装成完整实现。
+不能把这种模式称为原生 PyTorch，也不能直接取代远程真 PyTorch 内核。
+
+当前属于**待浏览器实测的实验分支**，尚需在 Chrome WebGPU、
+禁用 WebGPU 的 Chromium，以及真实 Win7 夸克环境分别跑单元测试、
+梯度检查、训练循环、内存增长与 Notebook 导入测试。
+
 ## 自动部署
 
 提交到 `main` 分支后，GitHub Actions 会构建 JupyterLite 并发布到 GitHub Pages。也可以在 Actions 页面手动运行 **Deploy JupyterLite**。
