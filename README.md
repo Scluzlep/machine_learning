@@ -42,6 +42,30 @@ python -m http.server 8000 --directory dist
 
 执行层自动处理 TensorFlow.js 的异步训练；教材仍使用标准 Python 写法。仓库的 GitHub Actions 会使用 Chromium 运行 Pyodide、科学计算包、原样 Keras 语句以及 Notebook 内核检测。
 
+## 实验性浏览器 PyTorch（需 WebGPU）
+
+此功能使用第三方 [torch-pyodide](https://github.com/celsowm/torch-pyodide) `0.0.84`，
+**不是 PyTorch 官方 C++/CUDA 运行时的 WebAssembly 移植**。
+其 Tensor、部分 `torch.nn`、自动微分等接口支持程度取决于第三方实现，
+目前不承诺与所有 PyTorch 教材、`torchvision`、`torchaudio` 或 CUDA 代码兼容。
+
+在支持 WebGPU 的浏览器中，打开普通 Python Notebook 并执行：
+
+```python
+import torch
+x = torch.tensor([1.0, 2.0, 3.0])
+print(x.tolist())
+```
+
+自定义内核会在检测到 `import torch` 或 `from torch ... import` 时，
+**按需**加载同源静态目录 `vendor/torch/` 中的 JS 运行时和 Python wheel。
+构建时会下载严格绑定到版本的清单、校验 wheel 与运行时 SHA-256，
+因此正常 Notebook 和首次页面加载不会预先下载 PyTorch。
+
+注意：WebGPU 不可用时，张量计算可能失败；不要将其误认为 CPU 回退或 CUDA GPU。
+如需完整原生 PyTorch，请使用独立的远程 Python 内核。
+此功能与课程使用的 TensorFlow.js 兼容层互不替代。
+
 ## 自动部署
 
 提交到 `main` 分支后，GitHub Actions 会构建 JupyterLite 并发布到 GitHub Pages。也可以在 Actions 页面手动运行 **Deploy JupyterLite**。
